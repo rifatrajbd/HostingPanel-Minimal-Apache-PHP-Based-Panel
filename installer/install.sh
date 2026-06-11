@@ -101,26 +101,54 @@ install -d -m 755 /etc/hostingpanel/site-access
 install -d -m 755 /var/backups/hostingpanel
 install -d -o _rspamd -g _rspamd -m 750 /var/lib/rspamd/dkim
 
-# ------------------------------------------------------------------ panel files
+# ------------------------------------------------------------------ panel files (Laravel + Filament)
 log "Installing panel to ${INSTALL_DIR}…"
 rsync -a --delete \
-    --exclude 'panel/var' --exclude 'panel/vendor' --exclude '.git' \
-    --exclude 'phpmyadmin' --exclude 'webmail' \
+    --exclude 'web/vendor' --exclude 'web/node_modules' --exclude '.git' \
+    --exclude 'phpmyadmin' --exclude 'webmail' --exclude 'panel' \
     "${SRC_DIR}/" "${INSTALL_DIR}/"
-chown -R root:root "${INSTALL_DIR}"   # NOT writable by the panel user
+chown -R root:root "${INSTALL_DIR}"   # code is root-owned, not writable by the panel user
 
-log "Running composer install…"
-(cd "${INSTALL_DIR}/panel" && composer install --no-dev --quiet --no-interaction)
+WEB="${INSTALL_DIR}/web"
 
-# Frontend assets ship in the repo; download only if somehow missing.
-if [[ ! -f "${INSTALL_DIR}/panel/public/assets/tailwind.js" ]]; then
-    log "Downloading frontend assets (Tailwind, Alpine)…"
-    fetch https://cdn.tailwindcss.com/3.4.5 -o "${INSTALL_DIR}/panel/public/assets/tailwind.js" \
-        || log "WARNING: Tailwind download failed — UI will be unstyled until you fetch it."
-    fetch https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js \
-        -o "${INSTALL_DIR}/panel/public/assets/alpine.min.js" \
-        || log "WARNING: Alpine download failed."
+log "Running composer install (Laravel)…"
+(cd "${WEB}" && COMPOSER_ALLOW_SUPERUSER=1 composer config policy.advisories.block false \
+    && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction --quiet)
+
+# .env — generated once, preserved on upgrades
+if [[ ! -f "${WEB}/.env" ]]; then
+    log "Creating panel .env…"
+    cp "${WEB}/.env.example" "${WEB}/.env"
+    {
+        echo "APP_NAME=HostingPanel"
+        echo "APP_ENV=production"
+        echo "APP_DEBUG=false"
+        echo "PANEL_DEV=false"
+        echo "DB_CONNECTION=sqlite"
+        echo "DB_DATABASE=/var/lib/hostingpanel/panel.sqlite"
+        echo "SESSION_DRIVER=database"
+        echo "PANELCTL_BIN=/usr/local/bin/panelctl"
+        echo "PANEL_UPLOADS=/var/lib/hostingpanel/uploads"
+    } >> "${WEB}/.env"
+    (cd "${WEB}" && php artisan key:generate --force --no-interaction)
 fi
+
+# SQLite database file (panel's own data) — owned by the panel user
+touch /var/lib/hostingpanel/panel.sqlite
+chown hostingpanel:hostingpanel /var/lib/hostingpanel/panel.sqlite
+
+# Writable runtime dirs must belong to the panel user
+chown -R hostingpanel:hostingpanel "${WEB}/storage" "${WEB}/bootstrap/cache"
+
+log "Migrating database and publishing assets…"
+(cd "${WEB}" \
+    && sudo -u hostingpanel php artisan migrate --force --no-interaction \
+    && php artisan filament:assets \
+    && php artisan storage:link \
+    && php artisan config:cache \
+    && php artisan route:cache \
+    && php artisan view:cache)
+chown -R hostingpanel:hostingpanel "${WEB}/storage" "${WEB}/bootstrap/cache"
 
 # panelctl wrapper (root-owned; sudoers points here)
 cat > /usr/local/bin/panelctl <<EOF
@@ -279,8 +307,8 @@ a2ensite -q hostingpanel.conf >/dev/null
 [[ -n "${LE_EMAIL}" ]] && echo "${LE_EMAIL}" > /etc/hostingpanel/le-email
 
 log "Creating panel admin user…"
-ADMIN_OUTPUT="$(sudo -u hostingpanel PANEL_DB=/var/lib/hostingpanel/panel.sqlite \
-    "php${PANEL_PHP}" "${INSTALL_DIR}/panel/bin/create-admin.php" admin)"
+ADMIN_EMAIL="${LE_EMAIL:-admin@${MAIL_HOSTNAME}}"
+ADMIN_OUTPUT="$(cd "${WEB}" && sudo -u hostingpanel php artisan hostingpanel:admin "${ADMIN_EMAIL}" --no-interaction)"
 
 # ------------------------------------------------------------------ firewall + fail2ban
 log "Configuring UFW and fail2ban…"

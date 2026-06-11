@@ -74,12 +74,23 @@ final class PanelCommands
 
         $ctx->run([
             'rsync', '-a', '--delete',
-            '--exclude', 'panel/var', '--exclude', 'panel/vendor', '--exclude', '.git',
+            '--exclude', 'web/vendor', '--exclude', 'web/node_modules', '--exclude', '.git',
+            '--exclude', 'web/.env', '--exclude', 'web/storage', '--exclude', 'panel',
             '--exclude', 'phpmyadmin', '--exclude', 'webmail',
             $src . '/', $dst . '/',
         ]);
+
+        $web = $dst . '/web';
         $ctx->run(['bash', '-c',
-            'cd /opt/hostingpanel/panel && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-interaction --quiet']);
+            "cd {$web} && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction --quiet"]);
+        // Re-apply ownership of writable dirs, run migrations + rebuild caches.
+        $ctx->run(['chown', '-R', 'hostingpanel:hostingpanel', "{$web}/storage", "{$web}/bootstrap/cache"], null, true);
+        $ctx->run(['bash', '-c',
+            "cd {$web} && sudo -u hostingpanel php artisan migrate --force --no-interaction"]);
+        $ctx->run(['bash', '-c',
+            "cd {$web} && php artisan filament:assets && php artisan optimize"]);
+        $ctx->run(['chown', '-R', 'hostingpanel:hostingpanel', "{$web}/storage", "{$web}/bootstrap/cache"], null, true);
+
         $ctx->run(['install', '-m', '755', "{$dst}/scripts/backup.sh", '/usr/local/bin/hostingpanel-backup']);
         $ctx->run(['install', '-m', '440', "{$dst}/etc/sudoers.d/hostingpanel", '/etc/sudoers.d/hostingpanel']);
         $ctx->run(['visudo', '-c'], null, false);

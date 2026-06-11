@@ -2,21 +2,23 @@
 Listen 8443
 <VirtualHost *:8443>
     ServerName {{server_name}}
-    DocumentRoot /opt/hostingpanel/panel/public
+    DocumentRoot /opt/hostingpanel/web/public
 
     SSLEngine on
     SSLCertificateFile {{cert}}
     SSLCertificateKeyFile {{key}}
     SSLProtocol -all +TLSv1.2 +TLSv1.3
 
-    <Directory /opt/hostingpanel/panel/public>
-        Options -Indexes
+    <Directory /opt/hostingpanel/web/public>
+        Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted
 
         RewriteEngine On
+        RewriteRule ^(.*)/$ /$1 [L,R=301]
+        RewriteCond %{REQUEST_FILENAME} !-d
         RewriteCond %{REQUEST_FILENAME} !-f
-        RewriteRule ^ index.php [QSA,L]
+        RewriteRule ^ index.php [L]
     </Directory>
 
     Alias /phpmyadmin /opt/hostingpanel/phpmyadmin

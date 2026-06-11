@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -v)",
+      "Bash(npm -v)",
+      "Bash(php panel/composer.phar --version)",
+      "Bash(php -m)",
+      "Bash(grep -iE \"^\\(pdo_sqlite|mbstring|openssl|tokenizer|xml|ctype|json|bcmath|fileinfo|curl|zip|gd\\)$\")",
+      "Bash(curl -fsS --connect-timeout 10 -o /dev/null -w \"%{http_code}\" https://repo.packagist.org/packages.json)",
+      "Bash(php artisan *)"
+    ]
+  }
+}
