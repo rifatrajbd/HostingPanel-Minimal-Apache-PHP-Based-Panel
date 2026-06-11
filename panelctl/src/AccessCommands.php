@@ -23,7 +23,12 @@ final class AccessCommands
         }
         $ranges = [];
         foreach (['https://www.cloudflare.com/ips-v4', 'https://www.cloudflare.com/ips-v6'] as $url) {
-            $body = $ctx->run(['curl', '-fsSL', '--max-time', '20', $url]);
+            try {
+                $body = $ctx->run(['curl', '-fsSL', '--connect-timeout', '15', '--max-time', '30', $url]);
+            } catch (RuntimeException) {
+                // Broken IPv6 routing on the host — retry over IPv4.
+                $body = $ctx->run(['curl', '-fsSL', '-4', '--connect-timeout', '15', '--max-time', '30', $url]);
+            }
             foreach (explode("\n", trim($body)) as $line) {
                 $line = trim($line);
                 if ($line !== '' && preg_match('#^[0-9a-fA-F:./]+$#', $line)) {

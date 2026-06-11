@@ -14,6 +14,13 @@ set -euo pipefail
 log()  { echo -e "\e[1;34m[hostingpanel]\e[0m $*"; }
 fail() { echo -e "\e[1;31m[hostingpanel] ERROR:\e[0m $*" >&2; exit 1; }
 
+# Download with sane timeouts; retry over IPv4 (many VPSes have broken
+# IPv6 routing, which makes plain curl hang for minutes).
+fetch() {
+    curl -fsSL --connect-timeout 20 --retry 2 "$@" \
+        || curl -fsSL -4 --connect-timeout 20 --retry 2 "$@"
+}
+
 [[ $EUID -eq 0 ]] || fail "Run as root: sudo bash installer/install.sh"
 grep -qE '22\.04|24\.04' /etc/os-release || fail "Ubuntu 22.04 or 24.04 required."
 
@@ -54,8 +61,18 @@ apt-get install -y -qq "php${PANEL_PHP}-sqlite3"
 
 if ! command -v composer >/dev/null; then
     log "Installing Composer…"
-    curl -sS https://getcomposer.org/installer | "php${PANEL_PHP}" -- \
-        --install-dir=/usr/local/bin --filename=composer --quiet
+    if fetch https://getcomposer.org/installer -o /tmp/composer-setup.php; then
+        "php${PANEL_PHP}" /tmp/composer-setup.php \
+            --install-dir=/usr/local/bin --filename=composer --quiet
+        rm -f /tmp/composer-setup.php
+    elif fetch https://github.com/composer/composer/releases/latest/download/composer.phar \
+            -o /usr/local/bin/composer; then
+        log "getcomposer.org unreachable — installed Composer from GitHub instead."
+        chmod 755 /usr/local/bin/composer
+    else
+        log "Falling back to the Ubuntu composer package…"
+        apt-get install -y -qq composer || fail "Could not install Composer by any method."
+    fi
 fi
 
 log "Installing mail stack (Postfix, Dovecot, Rspamd)…"
@@ -94,9 +111,9 @@ log "Running composer install…"
 (cd "${INSTALL_DIR}/panel" && composer install --no-dev --quiet --no-interaction)
 
 log "Downloading frontend assets (Tailwind, Alpine)…"
-curl -fsSL https://cdn.tailwindcss.com/3.4.5 -o "${INSTALL_DIR}/panel/public/assets/tailwind.js" \
+fetch https://cdn.tailwindcss.com/3.4.5 -o "${INSTALL_DIR}/panel/public/assets/tailwind.js" \
     || log "WARNING: Tailwind download failed — UI will be unstyled until you fetch it."
-curl -fsSL https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js \
+fetch https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js \
     -o "${INSTALL_DIR}/panel/public/assets/alpine.min.js" \
     || log "WARNING: Alpine download failed."
 
@@ -122,7 +139,7 @@ visudo -c >/dev/null || fail "sudoers validation failed"
 PMA_VERSION=5.2.1
 if [[ ! -d ${INSTALL_DIR}/phpmyadmin ]]; then
     log "Installing phpMyAdmin ${PMA_VERSION}…"
-    if curl -fsSL "https://files.phpmyadmin.net/phpMyAdmin/${PMA_VERSION}/phpMyAdmin-${PMA_VERSION}-all-languages.tar.gz" \
+    if fetch "https://files.phpmyadmin.net/phpMyAdmin/${PMA_VERSION}/phpMyAdmin-${PMA_VERSION}-all-languages.tar.gz" \
             -o /tmp/pma.tar.gz; then
         mkdir -p "${INSTALL_DIR}/phpmyadmin"
         tar xzf /tmp/pma.tar.gz -C "${INSTALL_DIR}/phpmyadmin" --strip-components=1
@@ -143,9 +160,9 @@ fi
 
 if [[ ! -d ${INSTALL_DIR}/webmail ]]; then
     log "Installing SnappyMail webmail (maintained RainLoop fork)…"
-    SNAPPY_URL="$(curl -fsSL https://api.github.com/repos/the-djmaze/snappymail/releases/latest \
+    SNAPPY_URL="$(fetch https://api.github.com/repos/the-djmaze/snappymail/releases/latest \
         | grep -o 'https://[^"]*snappymail-[0-9.]*\.zip' | head -1 || true)"
-    if [[ -n "${SNAPPY_URL}" ]] && curl -fsSL "${SNAPPY_URL}" -o /tmp/snappymail.zip; then
+    if [[ -n "${SNAPPY_URL}" ]] && fetch "${SNAPPY_URL}" -o /tmp/snappymail.zip; then
         mkdir -p "${INSTALL_DIR}/webmail"
         unzip -qo /tmp/snappymail.zip -d "${INSTALL_DIR}/webmail"
         rm -f /tmp/snappymail.zip
@@ -270,7 +287,7 @@ systemctl restart apache2 postfix dovecot rspamd fail2ban
 systemctl enable -q apache2 mariadb postfix dovecot rspamd fail2ban
 
 # ------------------------------------------------------------------ done
-SERVER_IP="$(curl -fsS -4 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
+SERVER_IP="$(curl -fsS -4 --connect-timeout 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
 echo
 echo "=============================================================="
 echo "  HostingPanel installed!"
