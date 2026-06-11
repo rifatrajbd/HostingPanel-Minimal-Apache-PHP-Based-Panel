@@ -14,11 +14,12 @@ final class SiteCommands
         $docRoot = "{$home}/htdocs";
         $socket = "/run/php/{$domain}.sock";
 
-        // System user (no shell, home = site dir)
+        // System user (no shell, home = site dir). Retry on transient
+        // /etc/passwd lock contention from background apt jobs.
         $ctx->run([
             'useradd', '--create-home', '--home-dir', $home,
             '--shell', '/usr/sbin/nologin', '--user-group', $user,
-        ]);
+        ], null, false, null, true);
 
         if (!$ctx->dryRun) {
             foreach (["{$docRoot}", "{$home}/logs", "{$home}/tmp"] as $dir) {
@@ -83,7 +84,7 @@ final class SiteCommands
 
         $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
         $ctx->run(['certbot', 'delete', '--non-interactive', '--cert-name', $domain], null, true);
-        $ctx->run(['userdel', $user], null, true);
+        $ctx->run(['userdel', $user], null, true, null, true);
         $ctx->deletePath("/var/www/{$domain}");
 
         $ctx->out("Site {$domain} deleted (files, vhost, FPM pool, certificate).");

@@ -17,15 +17,55 @@ final class Ctx
     /**
      * Run an external command (argv array — no shell involved).
      *
+     * When $retryOnLock is set, transient "cannot lock /etc/passwd" style
+     * failures (a background apt job briefly holding the user/group lock)
+     * are retried with backoff instead of failing the whole operation.
+     *
      * @param list<string> $argv
      */
-    public function run(array $argv, ?string $stdin = null, bool $allowFail = false, ?string $cwd = null): string
-    {
+    public function run(
+        array $argv,
+        ?string $stdin = null,
+        bool $allowFail = false,
+        ?string $cwd = null,
+        bool $retryOnLock = false
+    ): string {
         if ($this->dryRun) {
             $this->out('[dry-run] exec: ' . implode(' ', $argv));
             return '';
         }
 
+        $attempts = $retryOnLock ? 6 : 1;
+        for ($attempt = 1; ; $attempt++) {
+            [$code, $stdout, $stderr] = $this->exec($argv, $stdin, $cwd);
+
+            if ($code === 0) {
+                return $stdout;
+            }
+
+            $locked = stripos($stderr, 'cannot lock') !== false
+                || stripos($stderr, 'try again later') !== false
+                || stripos($stderr, 'resource temporarily unavailable') !== false;
+            if ($locked && $attempt < $attempts) {
+                sleep($attempt); // 1s, 2s, 3s… back off while the lock clears
+                continue;
+            }
+
+            if ($allowFail) {
+                return $stdout;
+            }
+            throw new RuntimeException(
+                implode(' ', array_slice($argv, 0, 2)) . " failed ({$code}): " . trim($stderr ?: $stdout)
+            );
+        }
+    }
+
+    /**
+     * @param list<string> $argv
+     * @return array{0: int, 1: string, 2: string} [exit code, stdout, stderr]
+     */
+    private function exec(array $argv, ?string $stdin, ?string $cwd): array
+    {
         $proc = proc_open($argv, [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -42,14 +82,7 @@ final class Ctx
         $stderr = (string) stream_get_contents($pipes[2]);
         fclose($pipes[1]);
         fclose($pipes[2]);
-        $code = proc_close($proc);
-
-        if ($code !== 0 && !$allowFail) {
-            throw new RuntimeException(
-                implode(' ', array_slice($argv, 0, 2)) . " failed ({$code}): " . trim($stderr ?: $stdout)
-            );
-        }
-        return $stdout;
+        return [proc_close($proc), $stdout, $stderr];
     }
 
     public function writeFile(string $path, string $content, int $mode = 0644): void
