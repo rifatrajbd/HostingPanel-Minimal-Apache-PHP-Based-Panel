@@ -1,0 +1,125 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * panelctl — privileged operations CLI for HostingPanel.
+ *
+ * Invoked by the panel web UI via a scoped sudoers rule, or manually
+ * over SSH. Every input is validated here independently of the panel.
+ *
+ * Secrets are read from STDIN, never from argv.
+ *
+ *   panelctl site:create --domain example.com --php 8.1
+ *   panelctl ssl:issue   --domain example.com [--www 1]
+ *   panelctl db:create   --name mydb --user myuser        (password on stdin)
+ *   panelctl mail:domain:add    --domain example.com
+ *   panelctl mail:mailbox:add   --address me@example.com  (password on stdin)
+ *
+ * Add --dry-run to print actions without executing (used by panel dev mode).
+ */
+
+declare(strict_types=1);
+
+require __DIR__ . '/src/Ctx.php';
+require __DIR__ . '/src/Validate.php';
+require __DIR__ . '/src/SiteCommands.php';
+require __DIR__ . '/src/DbCommands.php';
+require __DIR__ . '/src/MailCommands.php';
+require __DIR__ . '/src/FsCommands.php';
+require __DIR__ . '/src/PhpCommands.php';
+require __DIR__ . '/src/CronCommands.php';
+require __DIR__ . '/src/SslCommands.php';
+require __DIR__ . '/src/AccessCommands.php';
+require __DIR__ . '/src/PanelCommands.php';
+require __DIR__ . '/src/BackupCommands.php';
+
+const PANELCTL_PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3'];
+
+$args = array_slice($argv, 1);
+$command = null;
+$flags = [];
+$dryRun = false;
+
+for ($i = 0; $i < count($args); $i++) {
+    $arg = $args[$i];
+    if ($arg === '--dry-run') {
+        $dryRun = true;
+    } elseif (str_starts_with($arg, '--')) {
+        $name = substr($arg, 2);
+        $value = $args[$i + 1] ?? '';
+        if (str_starts_with($value, '--')) {
+            $value = '1'; // bare flag
+        } else {
+            $i++;
+        }
+        $flags[$name] = $value;
+    } elseif ($command === null) {
+        $command = $arg;
+    }
+}
+
+$map = [
+    'site:create' => [SiteCommands::class, 'create'],
+    'site:delete' => [SiteCommands::class, 'delete'],
+    'site:php' => [PhpCommands::class, 'sitePhp'],
+    'site:ini' => [PhpCommands::class, 'siteIni'],
+    'site:cfonly' => [AccessCommands::class, 'siteCfOnly'],
+    'cf:update' => [AccessCommands::class, 'cfUpdate'],
+    'ssl:issue' => [SslCommands::class, 'issue'],
+    'ssl:list' => [SslCommands::class, 'list'],
+    'ssl:renew' => [SslCommands::class, 'renew'],
+    'ssl:delete' => [SslCommands::class, 'delete'],
+    'db:create' => [DbCommands::class, 'create'],
+    'db:delete' => [DbCommands::class, 'delete'],
+    'mail:domain:add' => [MailCommands::class, 'domainAdd'],
+    'mail:domain:delete' => [MailCommands::class, 'domainDelete'],
+    'mail:mailbox:add' => [MailCommands::class, 'mailboxAdd'],
+    'mail:mailbox:delete' => [MailCommands::class, 'mailboxDelete'],
+    'mail:queue' => [MailCommands::class, 'queue'],
+    'mail:queue:flush' => [MailCommands::class, 'queueFlush'],
+    'mail:queue:delete' => [MailCommands::class, 'queueDelete'],
+    'mail:log' => [MailCommands::class, 'log'],
+    'fs:list' => [FsCommands::class, 'list'],
+    'fs:read' => [FsCommands::class, 'read'],
+    'fs:write' => [FsCommands::class, 'write'],
+    'fs:import' => [FsCommands::class, 'import'],
+    'fs:mkdir' => [FsCommands::class, 'mkdir'],
+    'fs:delete' => [FsCommands::class, 'delete'],
+    'fs:rename' => [FsCommands::class, 'rename'],
+    'fs:copy' => [FsCommands::class, 'copy'],
+    'fs:chmod' => [FsCommands::class, 'chmod'],
+    'fs:compress' => [FsCommands::class, 'compress'],
+    'fs:extract' => [FsCommands::class, 'extract'],
+    'php:ext-list' => [PhpCommands::class, 'extList'],
+    'php:ext' => [PhpCommands::class, 'ext'],
+    'cron:sync' => [CronCommands::class, 'sync'],
+    'cron:remove' => [CronCommands::class, 'remove'],
+    'panel:domain' => [PanelCommands::class, 'domain'],
+    'panel:self-update' => [PanelCommands::class, 'selfUpdate'],
+    'backup:config' => [BackupCommands::class, 'config'],
+    'backup:schedule' => [BackupCommands::class, 'schedule'],
+    'backup:test' => [BackupCommands::class, 'test'],
+    'backup:run' => [BackupCommands::class, 'run'],
+    'backup:log' => [BackupCommands::class, 'log'],
+];
+
+if ($command === null || !isset($map[$command])) {
+    fwrite(STDERR, "Usage: panelctl <command> [--flag value …]\nCommands:\n  "
+        . implode("\n  ", array_keys($map)) . "\n");
+    exit(2);
+}
+
+$ctx = new Ctx($dryRun, __DIR__ . '/templates');
+
+if (!$dryRun && function_exists('posix_geteuid') && posix_geteuid() !== 0) {
+    fwrite(STDERR, "panelctl must run as root (use sudo).\n");
+    exit(3);
+}
+
+try {
+    [$class, $method] = $map[$command];
+    exit((int) $class::$method($ctx, $flags));
+} catch (Throwable $e) {
+    fwrite(STDERR, 'Error: ' . $e->getMessage() . "\n");
+    exit(1);
+}

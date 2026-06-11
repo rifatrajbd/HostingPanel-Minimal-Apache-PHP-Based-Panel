@@ -1,0 +1,14 @@
+/* Small extras on top of Tailwind */
+::selection { background: rgba(56, 189, 248, 0.3); }
+
+code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+input::placeholder { color: rgb(71 85 105); }
+
+/* Scrollbars (WebKit) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(51 65 85); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(71 85 105); }

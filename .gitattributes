@@ -1,0 +1,13 @@
+# Shell scripts and server configs must always check out with LF,
+# or they break on the Linux VPS.
+* text=auto
+*.sh text eol=lf
+*.php text eol=lf
+*.tpl text eol=lf
+*.conf text eol=lf
+*.cf text eol=lf
+*.sql text eol=lf
+*.ext text eol=lf
+panelctl/panelctl text eol=lf
+etc/sudoers.d/hostingpanel text eol=lf
+etc/fail2ban-jail.local text eol=lf

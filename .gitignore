@@ -1,0 +1,8 @@
+panel/vendor/
+panel/var/
+panel/composer.phar
+panel/public/assets/tailwind.js
+panel/public/assets/alpine.min.js
+*.sqlite
+*.sqlite-*
+.env

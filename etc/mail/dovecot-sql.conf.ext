@@ -1,0 +1,4 @@
+driver = mysql
+connect = host=127.0.0.1 dbname=mailserver user=mailserver password=@MAILDB_PASSWORD@
+default_pass_scheme = BLF-CRYPT
+password_query = SELECT email AS user, password FROM virtual_users WHERE email = '%u'

@@ -1,0 +1,21 @@
+# /etc/fail2ban/jail.d/hostingpanel.local
+[DEFAULT]
+bantime = 1h
+findtime = 15m
+maxretry = 5
+
+[sshd]
+enabled = true
+
+[postfix]
+enabled = true
+mode = aggressive
+
+[dovecot]
+enabled = true
+
+[apache-auth]
+enabled = true
+
+[apache-badbots]
+enabled = true
