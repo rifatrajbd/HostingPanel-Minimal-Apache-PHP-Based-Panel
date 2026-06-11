@@ -4,7 +4,7 @@
 #
 # Install on any fresh Ubuntu 22.04/24.04 VPS with:
 #
-#   curl -fsSL https://raw.githubusercontent.com/rifatrajbd/hostingpanel/main/installer/web-install.sh \
+#   curl -fsSL https://raw.githubusercontent.com/rifatrajbd/HostingPanel-Minimal-Apache-PHP-Based-Panel/main/installer/web-install.sh \
 #     | sudo bash -s -- --email you@example.com
 #
 # All arguments are passed straight through to install.sh
@@ -12,7 +12,7 @@
 #
 set -euo pipefail
 
-REPO="${HOSTINGPANEL_REPO:-https://github.com/rifatrajbd/hostingpanel.git}"
+REPO="${HOSTINGPANEL_REPO:-https://github.com/rifatrajbd/HostingPanel-Minimal-Apache-PHP-Based-Panel.git}"
 SRC=/opt/hostingpanel-src
 
 [[ $EUID -eq 0 ]] || { echo "Run as root: curl … | sudo bash"; exit 1; }
