@@ -11,3 +11,8 @@
 panelctl/panelctl text eol=lf
 etc/sudoers.d/hostingpanel text eol=lf
 etc/fail2ban-jail.local text eol=lf
+
+# Vendored binaries must never be line-ending-normalized.
+*.phar binary
+*.tar.gz binary
+*.zip binary

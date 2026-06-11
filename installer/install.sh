@@ -61,13 +61,14 @@ apt-get install -y -qq "php${PANEL_PHP}-sqlite3"
 
 if ! command -v composer >/dev/null; then
     log "Installing Composer…"
-    if fetch https://getcomposer.org/installer -o /tmp/composer-setup.php; then
+    if [[ -f "${SRC_DIR}/third-party/composer.phar" ]]; then
+        install -m 755 "${SRC_DIR}/third-party/composer.phar" /usr/local/bin/composer
+    elif fetch https://getcomposer.org/installer -o /tmp/composer-setup.php; then
         "php${PANEL_PHP}" /tmp/composer-setup.php \
             --install-dir=/usr/local/bin --filename=composer --quiet
         rm -f /tmp/composer-setup.php
     elif fetch https://github.com/composer/composer/releases/latest/download/composer.phar \
             -o /usr/local/bin/composer; then
-        log "getcomposer.org unreachable — installed Composer from GitHub instead."
         chmod 755 /usr/local/bin/composer
     else
         log "Falling back to the Ubuntu composer package…"
@@ -104,18 +105,22 @@ install -d -o _rspamd -g _rspamd -m 750 /var/lib/rspamd/dkim
 log "Installing panel to ${INSTALL_DIR}…"
 rsync -a --delete \
     --exclude 'panel/var' --exclude 'panel/vendor' --exclude '.git' \
+    --exclude 'phpmyadmin' --exclude 'webmail' \
     "${SRC_DIR}/" "${INSTALL_DIR}/"
 chown -R root:root "${INSTALL_DIR}"   # NOT writable by the panel user
 
 log "Running composer install…"
 (cd "${INSTALL_DIR}/panel" && composer install --no-dev --quiet --no-interaction)
 
-log "Downloading frontend assets (Tailwind, Alpine)…"
-fetch https://cdn.tailwindcss.com/3.4.5 -o "${INSTALL_DIR}/panel/public/assets/tailwind.js" \
-    || log "WARNING: Tailwind download failed — UI will be unstyled until you fetch it."
-fetch https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js \
-    -o "${INSTALL_DIR}/panel/public/assets/alpine.min.js" \
-    || log "WARNING: Alpine download failed."
+# Frontend assets ship in the repo; download only if somehow missing.
+if [[ ! -f "${INSTALL_DIR}/panel/public/assets/tailwind.js" ]]; then
+    log "Downloading frontend assets (Tailwind, Alpine)…"
+    fetch https://cdn.tailwindcss.com/3.4.5 -o "${INSTALL_DIR}/panel/public/assets/tailwind.js" \
+        || log "WARNING: Tailwind download failed — UI will be unstyled until you fetch it."
+    fetch https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js \
+        -o "${INSTALL_DIR}/panel/public/assets/alpine.min.js" \
+        || log "WARNING: Alpine download failed."
+fi
 
 # panelctl wrapper (root-owned; sudoers points here)
 cat > /usr/local/bin/panelctl <<EOF
@@ -139,10 +144,14 @@ visudo -c >/dev/null || fail "sudoers validation failed"
 PMA_VERSION=5.2.1
 if [[ ! -d ${INSTALL_DIR}/phpmyadmin ]]; then
     log "Installing phpMyAdmin ${PMA_VERSION}…"
-    if fetch "https://files.phpmyadmin.net/phpMyAdmin/${PMA_VERSION}/phpMyAdmin-${PMA_VERSION}-all-languages.tar.gz" \
-            -o /tmp/pma.tar.gz; then
+    PMA_TAR="${INSTALL_DIR}/third-party/phpmyadmin.tar.gz"
+    if [[ ! -f "${PMA_TAR}" ]]; then
+        fetch "https://files.phpmyadmin.net/phpMyAdmin/${PMA_VERSION}/phpMyAdmin-${PMA_VERSION}-all-languages.tar.gz" \
+            -o /tmp/pma.tar.gz && PMA_TAR=/tmp/pma.tar.gz
+    fi
+    if [[ -f "${PMA_TAR}" ]]; then
         mkdir -p "${INSTALL_DIR}/phpmyadmin"
-        tar xzf /tmp/pma.tar.gz -C "${INSTALL_DIR}/phpmyadmin" --strip-components=1
+        tar xzf "${PMA_TAR}" -C "${INSTALL_DIR}/phpmyadmin" --strip-components=1
         rm -f /tmp/pma.tar.gz
         cat > "${INSTALL_DIR}/phpmyadmin/config.inc.php" <<EOF
 <?php
@@ -160,11 +169,16 @@ fi
 
 if [[ ! -d ${INSTALL_DIR}/webmail ]]; then
     log "Installing SnappyMail webmail (maintained RainLoop fork)…"
-    SNAPPY_URL="$(fetch https://api.github.com/repos/the-djmaze/snappymail/releases/latest \
-        | grep -o 'https://[^"]*snappymail-[0-9.]*\.zip' | head -1 || true)"
-    if [[ -n "${SNAPPY_URL}" ]] && fetch "${SNAPPY_URL}" -o /tmp/snappymail.zip; then
+    SNAPPY_ZIP="${INSTALL_DIR}/third-party/snappymail.zip"
+    if [[ ! -f "${SNAPPY_ZIP}" ]]; then
+        SNAPPY_URL="$(fetch https://api.github.com/repos/the-djmaze/snappymail/releases/latest \
+            | grep -o 'https://[^"]*snappymail-[0-9.]*\.zip' | head -1 || true)"
+        [[ -n "${SNAPPY_URL}" ]] && fetch "${SNAPPY_URL}" -o /tmp/snappymail.zip \
+            && SNAPPY_ZIP=/tmp/snappymail.zip
+    fi
+    if [[ -f "${SNAPPY_ZIP}" ]]; then
         mkdir -p "${INSTALL_DIR}/webmail"
-        unzip -qo /tmp/snappymail.zip -d "${INSTALL_DIR}/webmail"
+        unzip -qo "${SNAPPY_ZIP}" -d "${INSTALL_DIR}/webmail"
         rm -f /tmp/snappymail.zip
         cat > "${INSTALL_DIR}/webmail/include.php" <<'EOF'
 <?php
