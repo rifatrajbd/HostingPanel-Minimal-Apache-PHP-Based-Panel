@@ -50,10 +50,8 @@ passwords) are passed via **stdin**, never via argv or environment.
 
 ## Install — one line (fresh Ubuntu 22.04 / 24.04 VPS)
 
-After pushing this repo to GitHub (replace YOURUSER in `installer/web-install.sh`):
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOURUSER/hostingpanel/main/installer/web-install.sh \
+curl -fsSL https://raw.githubusercontent.com/rifatrajbd/hostingpanel/main/installer/web-install.sh \
   | sudo bash -s -- --email you@example.com
 ```
 
