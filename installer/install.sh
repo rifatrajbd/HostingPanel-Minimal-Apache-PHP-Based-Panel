@@ -404,10 +404,16 @@ log "Fetching Cloudflare IP ranges…"
 /usr/local/bin/panelctl cf:update || log "WARNING: cf:update failed — run 'panelctl cf:update' later."
 
 # ------------------------------------------------------------------ services
+# A single failed restart must NOT abort the script (set -e) before we print
+# the admin credentials — restart each service tolerantly and warn instead.
 log "Restarting services…"
-for v in "${PHP_VERSIONS[@]}"; do systemctl restart "php${v}-fpm"; done
-systemctl restart apache2 postfix dovecot rspamd fail2ban pdns
-systemctl enable -q apache2 mariadb postfix dovecot rspamd fail2ban pdns
+for v in "${PHP_VERSIONS[@]}"; do
+    systemctl restart "php${v}-fpm" || log "WARNING: php${v}-fpm did not restart cleanly."
+done
+for svc in apache2 postfix dovecot rspamd fail2ban pdns; do
+    systemctl restart "$svc" || log "WARNING: ${svc} did not restart cleanly (check 'systemctl status ${svc}')."
+done
+systemctl enable -q apache2 mariadb postfix dovecot rspamd fail2ban pdns 2>/dev/null || true
 
 # ------------------------------------------------------------------ done
 SERVER_IP="$(curl -fsS -4 --connect-timeout 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
