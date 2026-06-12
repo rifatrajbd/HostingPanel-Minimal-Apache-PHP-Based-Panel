@@ -14,6 +14,9 @@ RestartSec=2
 # The panel UI connects over the socket; no sudo is granted anywhere.
 Environment=PANELCTL_SOCKET=/run/hostingpanel/panelctl.sock
 Environment=PANELCTL_GROUP=hostingpanel
+# Full PATH so the daemon can find useradd, a2ensite, certbot, chpasswd,
+# postqueue, pdns_control, etc. (systemd's default PATH omits some sbin dirs).
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Hardening (the daemon legitimately needs broad root powers to manage the
 # server, so we keep this conservative — it still manages users, services,
