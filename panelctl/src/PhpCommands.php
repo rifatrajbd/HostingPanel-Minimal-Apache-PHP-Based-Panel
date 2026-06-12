@@ -101,7 +101,7 @@ final class PhpCommands
     /** @return array<string, string> validated ini overrides merged over defaults */
     public static function readIni(Ctx $ctx): array
     {
-        $raw = $ctx->dryRun ? '{}' : (string) stream_get_contents(STDIN);
+        $raw = $ctx->dryRun ? '{}' : $ctx->stdin();
         $data = json_decode($raw === '' ? '{}' : $raw, true);
         if (!is_array($data)) {
             $data = [];

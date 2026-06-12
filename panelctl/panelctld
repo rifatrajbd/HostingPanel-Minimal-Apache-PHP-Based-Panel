@@ -1,0 +1,110 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * panelctld — the privileged HostingPanel daemon.
+ *
+ * Runs as root (systemd service) and listens on a private Unix socket.
+ * The panel web UI (running as the unprivileged "hostingpanel" user)
+ * connects to the socket and sends one request, then waits for the
+ * result — so there is NO sudo anywhere, yet the UI still gets
+ * synchronous success/error just like before.
+ *
+ * Socket permissions (root:hostingpanel, 0660) are the only gatekeeper:
+ * only root and members of the hostingpanel group can connect.
+ *
+ * Wire protocol (newline-delimited JSON, one request per connection):
+ *   ->  {"command":"site:create","flags":{...},"stdin":"<secret/payload>"}
+ *   <-  {"code":0,"stdout":"...","stderr":"..."}
+ */
+
+declare(strict_types=1);
+
+require __DIR__ . '/src/bootstrap.php';
+
+const MAX_FRAME = 67108864; // 64 MB (covers file reads/writes through fs:*)
+
+$socketPath = getenv('PANELCTL_SOCKET') ?: '/run/hostingpanel/panelctl.sock';
+$group = getenv('PANELCTL_GROUP') ?: 'hostingpanel';
+
+if (function_exists('posix_geteuid') && posix_geteuid() !== 0) {
+    fwrite(STDERR, "panelctld must run as root.\n");
+    exit(3);
+}
+
+// Ensure the runtime directory exists and is reachable by the panel group.
+$dir = dirname($socketPath);
+if (!is_dir($dir)) {
+    mkdir($dir, 0750, true);
+}
+@chgrp($dir, $group);
+@chmod($dir, 0750);
+
+@unlink($socketPath);
+$server = @stream_socket_server('unix://' . $socketPath, $errno, $errstr);
+if ($server === false) {
+    fwrite(STDERR, "Failed to bind {$socketPath}: {$errstr}\n");
+    exit(1);
+}
+@chgrp($socketPath, $group);
+@chmod($socketPath, 0660);
+
+// Auto-reap children so concurrent slow tasks (certbot, composer) don't zombie.
+$canFork = function_exists('pcntl_fork') && function_exists('pcntl_signal');
+if ($canFork) {
+    pcntl_signal(SIGCHLD, SIG_IGN);
+    pcntl_signal(SIGTERM, function () use ($socketPath) {
+        @unlink($socketPath);
+        exit(0);
+    });
+}
+
+fwrite(STDOUT, "panelctld listening on {$socketPath}\n");
+
+while (true) {
+    if ($canFork) {
+        pcntl_signal_dispatch();
+    }
+    $conn = @stream_socket_accept($server, -1);
+    if ($conn === false) {
+        continue;
+    }
+
+    if ($canFork) {
+        $pid = pcntl_fork();
+        if ($pid === 0) {            // child
+            fclose($server);
+            handle_connection($conn);
+            exit(0);
+        }
+        if ($pid > 0) {             // parent
+            fclose($conn);
+            continue;
+        }
+        // fork failed — fall through to handle inline
+    }
+    handle_connection($conn);
+}
+
+function handle_connection($conn): void
+{
+    stream_set_timeout($conn, 600);
+    $line = stream_get_line($conn, MAX_FRAME, "\n");
+    $request = json_decode((string) $line, true);
+
+    if (!is_array($request) || !isset($request['command'])) {
+        $response = ['code' => 2, 'stdout' => '', 'stderr' => 'Malformed request'];
+    } else {
+        [$code, $stdout, $stderr] = Dispatcher::dispatch(
+            (string) $request['command'],
+            is_array($request['flags'] ?? null) ? $request['flags'] : [],
+            (string) ($request['stdin'] ?? ''),
+            false,
+        );
+        $response = ['code' => $code, 'stdout' => $stdout, 'stderr' => $stderr];
+    }
+
+    fwrite($conn, json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+    fflush($conn);
+    fclose($conn);
+}

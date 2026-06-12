@@ -85,7 +85,10 @@ apt-get install -y -qq postfix postfix-mysql \
 # ------------------------------------------------------------------ users & dirs
 log "Creating system users and directories…"
 id hostingpanel &>/dev/null || \
-    useradd --system --home-dir /var/lib/hostingpanel --shell /usr/sbin/nologin hostingpanel
+    useradd --system --user-group --home-dir /var/lib/hostingpanel --shell /usr/sbin/nologin hostingpanel
+# Guarantee the group exists and the panel user is a member (socket gatekeeper).
+getent group hostingpanel >/dev/null || groupadd hostingpanel
+usermod -aG hostingpanel hostingpanel
 id vmail &>/dev/null || \
     useradd --system --uid 5000 --home-dir /var/vmail --shell /usr/sbin/nologin vmail
 
@@ -127,7 +130,7 @@ if [[ ! -f "${WEB}/.env" ]]; then
         echo "DB_CONNECTION=sqlite"
         echo "DB_DATABASE=/var/lib/hostingpanel/panel.sqlite"
         echo "SESSION_DRIVER=database"
-        echo "PANELCTL_BIN=/usr/local/bin/panelctl"
+        echo "PANELCTL_SOCKET=/run/hostingpanel/panelctl.sock"
         echo "PANEL_UPLOADS=/var/lib/hostingpanel/uploads"
     } >> "${WEB}/.env"
     (cd "${WEB}" && php artisan key:generate --force --no-interaction)
@@ -150,12 +153,22 @@ log "Migrating database and publishing assets…"
     && php artisan view:cache)
 chown -R hostingpanel:hostingpanel "${WEB}/storage" "${WEB}/bootstrap/cache"
 
-# panelctl wrapper (root-owned; sudoers points here)
+# panelctl CLI wrapper — for root use over SSH and from root cron jobs.
 cat > /usr/local/bin/panelctl <<EOF
 #!/bin/bash
 exec /usr/bin/php${PANEL_PHP} ${INSTALL_DIR}/panelctl/panelctl "\$@"
 EOF
 chmod 755 /usr/local/bin/panelctl
+
+# panelctld daemon — the privilege boundary the panel UI talks to (no sudo).
+log "Installing panelctld daemon (socket-based privilege separation)…"
+sed "s#/usr/bin/php8.3#/usr/bin/php${PANEL_PHP}#" \
+    "${INSTALL_DIR}/etc/panelctld.service" > /etc/systemd/system/panelctld.service
+# The old sudoers rule is no longer used — remove it if a prior install left one.
+rm -f /etc/sudoers.d/hostingpanel
+systemctl daemon-reload
+systemctl enable -q panelctld
+systemctl restart panelctld
 
 # backup script + weekly Cloudflare IP refresh
 install -m 755 "${INSTALL_DIR}/scripts/backup.sh" /usr/local/bin/hostingpanel-backup
@@ -164,9 +177,6 @@ cat > /etc/cron.weekly/hostingpanel-cfips <<'EOF'
 /usr/local/bin/panelctl cf:update >/dev/null 2>&1 || true
 EOF
 chmod 755 /etc/cron.weekly/hostingpanel-cfips
-
-install -m 440 "${INSTALL_DIR}/etc/sudoers.d/hostingpanel" /etc/sudoers.d/hostingpanel
-visudo -c >/dev/null || fail "sudoers validation failed"
 
 # ------------------------------------------------------------------ phpMyAdmin + SnappyMail webmail
 PMA_VERSION=5.2.1

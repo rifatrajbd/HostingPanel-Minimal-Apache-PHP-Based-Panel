@@ -92,13 +92,19 @@ final class PanelCommands
         $ctx->run(['chown', '-R', 'hostingpanel:hostingpanel', "{$web}/storage", "{$web}/bootstrap/cache"], null, true);
 
         $ctx->run(['install', '-m', '755', "{$dst}/scripts/backup.sh", '/usr/local/bin/hostingpanel-backup']);
-        $ctx->run(['install', '-m', '440', "{$dst}/etc/sudoers.d/hostingpanel", '/etc/sudoers.d/hostingpanel']);
-        $ctx->run(['visudo', '-c'], null, false);
+        // Refresh the daemon unit in case it changed, then reload systemd.
+        $ctx->run(['install', '-m', '644', "{$dst}/etc/panelctld.service", '/etc/systemd/system/panelctld.service'], null, true);
+        $ctx->run(['systemctl', 'daemon-reload'], null, true);
         $ctx->run(['systemctl', 'reload', 'php8.3-fpm'], null, true);
         $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
 
+        // Restart panelctld AFTER this request finishes (a synchronous restart
+        // would kill the process currently running this self-update). systemd-run
+        // schedules it in a transient unit outside our cgroup.
+        $ctx->run(['systemd-run', '--on-active=3', 'systemctl', 'restart', 'panelctld'], null, true);
+
         $rev = $ctx->dryRun ? 'dry-run' : trim($ctx->run(['git', '-C', $src, 'rev-parse', '--short', 'HEAD'], null, true));
-        $ctx->out("Panel updated to revision {$rev}.");
+        $ctx->out("Panel updated to revision {$rev}. The privileged daemon restarts in a few seconds.");
         return 0;
     }
 }

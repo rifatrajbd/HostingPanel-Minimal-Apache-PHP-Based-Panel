@@ -15,7 +15,7 @@ final class CronCommands
         $user = Validate::systemUserFor($domain);
         $file = "/etc/cron.d/hostingpanel-{$user}";
 
-        $raw = $ctx->dryRun ? '[]' : (string) stream_get_contents(STDIN);
+        $raw = $ctx->dryRun ? '[]' : $ctx->stdin();
         $jobs = json_decode($raw === '' ? '[]' : $raw, true);
         if (!is_array($jobs)) {
             throw new InvalidArgumentException('Expected a JSON array of jobs on stdin.');

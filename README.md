@@ -18,22 +18,26 @@ Inspired by CloudPanel, built on **Apache + PHP-FPM** with a full mail stack.
 
 ```
 ┌──────────────────────────────────┐
-│ Panel web UI  (PHP, runs as the  │  ← https://your-vps:8443
-│ unprivileged "hostingpanel" user)│
+│ Panel web UI (Laravel + Filament)│  ← https://your-vps:8443
+│ runs as unprivileged hostingpanel│
 └───────────────┬──────────────────┘
-                │ sudo -n /usr/local/bin/panelctl …   (scoped sudoers entry)
+                │ request over a private Unix socket
+                │ /run/hostingpanel/panelctl.sock  (root:hostingpanel, 0660)
 ┌───────────────▼──────────────────┐
-│ panelctl (root CLI)              │
+│ panelctld (root daemon, systemd) │   ← NO sudo anywhere
 │  site:create / site:delete       │
-│  ssl:issue                       │
-│  db:create / db:delete           │
-│  mail:domain:add  mailbox:add …  │
+│  ssl:* db:* mail:* fs:* cron:* …  │
 └──────────────────────────────────┘
 ```
 
-The web UI never runs as root. All privileged operations go through `panelctl`,
-which validates every input again independently. Secrets (DB / mailbox
-passwords) are passed via **stdin**, never via argv or environment.
+Privilege separation is **DirectAdmin/CloudPanel-style**: the web UI never runs
+as root and has **no sudo rights at all**. It connects to the root `panelctld`
+daemon over a private Unix socket (whose `root:hostingpanel 0660` permissions are
+the only gatekeeper) and waits for the result — so operations stay synchronous
+(instant success/error in the UI) while the privilege boundary is a real daemon,
+not a sudo rule. The same command classes also back the `panelctl` CLI for root
+SSH/cron use. Every input is validated again inside the daemon; secrets travel
+inside the request, never via argv or environment.
 
 ## Features
 

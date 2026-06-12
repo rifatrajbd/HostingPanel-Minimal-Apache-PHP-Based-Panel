@@ -1,4 +1,0 @@
-# HostingPanel: allow the unprivileged panel user to run panelctl as root.
-# panelctl validates all of its inputs itself (see panelctl/src/Validate.php).
-Defaults:hostingpanel !requiretty
-hostingpanel ALL=(root) NOPASSWD: /usr/local/bin/panelctl

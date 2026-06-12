@@ -1,0 +1,26 @@
+[Unit]
+Description=HostingPanel privileged operations daemon (panelctld)
+Documentation=https://github.com/rifatrajbd/HostingPanel-Minimal-Apache-PHP-Based-Panel
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/php8.3 /opt/hostingpanel/panelctl/panelctld
+RuntimeDirectory=hostingpanel
+RuntimeDirectoryMode=0750
+Restart=always
+RestartSec=2
+# The panel UI connects over the socket; no sudo is granted anywhere.
+Environment=PANELCTL_SOCKET=/run/hostingpanel/panelctl.sock
+Environment=PANELCTL_GROUP=hostingpanel
+
+# Hardening (the daemon legitimately needs broad root powers to manage the
+# server, so we keep this conservative — it still manages users, services,
+# certs and mail — but drop the obviously-unneeded bits).
+NoNewPrivileges=false
+ProtectHome=false
+ProtectSystem=false
+
+[Install]
+WantedBy=multi-user.target

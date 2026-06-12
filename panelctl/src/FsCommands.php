@@ -17,11 +17,11 @@ final class FsCommands
     public static function list(Ctx $ctx, array $flags): int
     {
         [$base] = self::base($flags);
-        $dir = self::resolve($base, $flags['path'] ?? '/', true);
         if ($ctx->dryRun) {
             $ctx->out('[]');
             return 0;
         }
+        $dir = self::resolve($base, $flags['path'] ?? '/', true);
         if (!is_dir($dir)) {
             throw new InvalidArgumentException('Not a directory.');
         }
@@ -77,7 +77,7 @@ final class FsCommands
             $ctx->out('[dry-run] write ' . $file);
             return 0;
         }
-        $content = (string) stream_get_contents(STDIN);
+        $content = $ctx->stdin();
         if (file_put_contents($file, $content) === false) {
             throw new RuntimeException('Write failed.');
         }
@@ -193,7 +193,7 @@ final class FsCommands
         $destRel = $flags['dest'] ?? '';
         $dest = self::resolve($base, $destRel);
 
-        $paths = json_decode($ctx->dryRun ? '[]' : (string) stream_get_contents(STDIN), true);
+        $paths = json_decode($ctx->dryRun ? '[]' : $ctx->stdin(), true);
         if (!is_array($paths)) {
             $paths = [];
         }

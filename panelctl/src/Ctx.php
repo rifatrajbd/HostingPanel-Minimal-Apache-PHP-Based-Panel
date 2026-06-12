@@ -8,9 +8,18 @@ declare(strict_types=1);
  */
 final class Ctx
 {
+    /** Response text built up by command handlers via out(). */
+    private string $output = '';
+
+    /**
+     * @param string $stdin Secret / payload that the caller sent in (instead
+     *                      of the process STDIN), so the same command classes
+     *                      work from both the CLI and the socket daemon.
+     */
     public function __construct(
         public readonly bool $dryRun,
-        public readonly string $templateDir
+        public readonly string $templateDir,
+        private readonly string $stdin = ''
     ) {
     }
 
@@ -127,21 +136,25 @@ final class Ctx
         return $content;
     }
 
-    /** Read a secret from stdin (single line). */
+    /** The full payload the caller sent in (JSON for some commands). */
+    public function stdin(): string
+    {
+        return $this->dryRun ? '' : $this->stdin;
+    }
+
+    /** Read a single-line secret from the injected payload. */
     public function readSecret(): string
     {
         if ($this->dryRun) {
-            // Consume stdin if present but never echo it.
-            if (!stream_isatty(STDIN)) {
-                stream_get_contents(STDIN);
-            }
-            return 'dry-run-secret';
+            // Alphanumeric + long enough to satisfy db/mailbox validators.
+            return 'DryRunSecret1234';
         }
-        $line = fgets(STDIN);
-        if ($line === false || trim($line) === '') {
+        $line = trim($this->stdin);
+        if ($line === '') {
             throw new RuntimeException('Expected secret on stdin.');
         }
-        return trim($line);
+        // Only the first line is the secret.
+        return trim(strtok($line, "\n"));
     }
 
     public function mysql(string $database, string $sql): string
@@ -149,8 +162,14 @@ final class Ctx
         return $this->run(['mysql', '--batch', '--skip-column-names', $database, '-e', $sql]);
     }
 
+    /** Append a line to the response buffer (returned to the caller). */
     public function out(string $message): void
     {
-        fwrite(STDOUT, $message . "\n");
+        $this->output .= $message . "\n";
+    }
+
+    public function getOutput(): string
+    {
+        return $this->output;
     }
 }

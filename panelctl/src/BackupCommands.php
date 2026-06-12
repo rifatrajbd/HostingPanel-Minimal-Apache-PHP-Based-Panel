@@ -18,7 +18,7 @@ final class BackupCommands
     /** Configure the rclone remote. stdin JSON: {type, host, user, pass, token, path, retention} */
     public static function config(Ctx $ctx, array $flags): int
     {
-        $raw = $ctx->dryRun ? '{}' : (string) stream_get_contents(STDIN);
+        $raw = $ctx->dryRun ? '{}' : $ctx->stdin();
         $cfg = json_decode($raw === '' ? '{}' : $raw, true);
         if (!is_array($cfg)) {
             throw new InvalidArgumentException('Expected JSON config on stdin.');
