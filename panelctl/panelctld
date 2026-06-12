@@ -72,7 +72,13 @@ while (true) {
 
     if ($canFork) {
         $pid = pcntl_fork();
-        if ($pid === 0) {            // child
+        if ($pid === 0) {            // child handles the request
+            // Restore DEFAULT signal handling. The parent ignores SIGCHLD to
+            // auto-reap workers, but that disposition is inherited here and by
+            // every command we spawn — which breaks proc_open() and tools that
+            // waitpid() internally (useradd etc.) with "No child processes".
+            pcntl_signal(SIGCHLD, SIG_DFL);
+            pcntl_signal(SIGTERM, SIG_DFL);
             fclose($server);
             handle_connection($conn);
             exit(0);
@@ -81,7 +87,12 @@ while (true) {
             fclose($conn);
             continue;
         }
-        // fork failed — fall through to handle inline
+        // fork failed — handle inline, but with default SIGCHLD so the
+        // command's own child processes can be waited on.
+        pcntl_signal(SIGCHLD, SIG_DFL);
+        handle_connection($conn);
+        pcntl_signal(SIGCHLD, SIG_IGN);
+        continue;
     }
     handle_connection($conn);
 }
