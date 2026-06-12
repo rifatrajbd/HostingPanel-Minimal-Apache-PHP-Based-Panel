@@ -54,6 +54,45 @@ final class MailCommands
         return 0;
     }
 
+    /** Check whether the domain's mail DNS (MX/A/SPF/DKIM/DMARC/PTR) is set. */
+    public static function dnsCheck(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        if ($ctx->dryRun) {
+            $ctx->out('[dry-run] mail dns check ' . $domain);
+            return 0;
+        }
+        $ip4 = Net::ipv4();
+        $dig = fn (string $type, string $host) => trim($ctx->run(['dig', '+short', $type, $host], null, true));
+
+        $mx = $dig('MX', $domain);
+        $ctx->out(stripos($mx, "mail.{$domain}") !== false
+            ? "[OK]   MX → " . str_replace("\n", ', ', $mx)
+            : "[MISS] MX record (want: 10 mail.{$domain}) — found: " . ($mx ?: 'none'));
+
+        $a = $dig('A', "mail.{$domain}");
+        $ctx->out($a !== '' && ($ip4 === null || str_contains($a, $ip4))
+            ? "[OK]   mail.{$domain} A → {$a}"
+            : "[MISS] mail.{$domain} A record (want: {$ip4}) — found: " . ($a ?: 'none'));
+
+        $spf = $dig('TXT', $domain);
+        $ctx->out(stripos($spf, 'v=spf1') !== false ? '[OK]   SPF present' : '[MISS] SPF (v=spf1 mx -all)');
+
+        $dkim = $dig('TXT', "mail._domainkey.{$domain}");
+        $ctx->out(stripos($dkim, 'p=') !== false ? '[OK]   DKIM present' : '[MISS] DKIM (mail._domainkey)');
+
+        $dmarc = $dig('TXT', "_dmarc.{$domain}");
+        $ctx->out(stripos($dmarc, 'v=DMARC1') !== false ? '[OK]   DMARC present' : '[MISS] DMARC (_dmarc)');
+
+        if ($ip4 !== null) {
+            $ptr = $dig('-x', $ip4);
+            $ctx->out(stripos($ptr, "mail.{$domain}") !== false
+                ? "[OK]   PTR → {$ptr}"
+                : "[WARN] reverse DNS (PTR) of {$ip4} is '" . ($ptr ?: 'unset') . "' — ask your VPS provider to set it to mail.{$domain}");
+        }
+        return 0;
+    }
+
     /** @param array<string, string> $flags */
     public static function domainDelete(Ctx $ctx, array $flags): int
     {

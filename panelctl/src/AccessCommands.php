@@ -99,12 +99,22 @@ final class AccessCommands
         $file = self::ACCESS_DIR . "/{$domain}.conf";
 
         if ($enable) {
-            if (!$ctx->dryRun && !is_file(self::REQUIRE_FILE)) {
+            if (!$ctx->dryRun && !is_file(self::REMOTEIP_FILE)) {
                 self::cfUpdate($ctx, []);
             }
+            // mod_remoteip rewrites REMOTE_ADDR from CF-Connecting-IP ONLY when
+            // the TCP connection comes from a trusted Cloudflare IP. So a
+            // request genuinely arrived via Cloudflare iff REMOTE_ADDR now
+            // equals the CF-Connecting-IP header. Direct hits (even with a
+            // forged header) fail this and are denied. This is the correct
+            // check — `Require ip <CF ranges>` does NOT work here because by
+            // the time it runs, REMOTE_ADDR is already the visitor's IP.
             $ctx->writeFile(
                 $file,
-                "<Location \"/\">\n    Include " . self::REQUIRE_FILE . "\n</Location>\n"
+                "# Cloudflare-only access (managed by HostingPanel).\n"
+                . "<If \"%{HTTP:CF-Connecting-IP} == '' || %{REMOTE_ADDR} != %{HTTP:CF-Connecting-IP}\">\n"
+                . "    Require all denied\n"
+                . "</If>\n"
             );
             $ctx->out("Cloudflare-only access ENABLED for {$domain}. Make sure the domain is proxied (orange cloud) in Cloudflare!");
         } else {

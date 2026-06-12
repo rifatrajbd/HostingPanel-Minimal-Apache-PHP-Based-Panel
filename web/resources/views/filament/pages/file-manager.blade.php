@@ -26,6 +26,16 @@
             </nav>
 
             <div class="ml-auto flex items-center gap-2">
+                {{-- Auto-upload dropzone: importing starts the moment files are chosen --}}
+                <label class="cursor-pointer">
+                    <input type="file" multiple wire:model="uploads" class="hidden">
+                    <span class="fi-btn fi-btn-size-sm inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium px-3 py-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 7.5L12 3m0 0L7.5 7.5M12 3v13.5"/></svg>
+                        <span wire:loading.remove wire:target="uploads">Upload</span>
+                        <span wire:loading wire:target="uploads">Uploading…</span>
+                    </span>
+                </label>
+
                 <form wire:submit.prevent="doSearch" class="flex items-center gap-1">
                     <input type="search" wire:model="search" placeholder="Search files…"
                            class="fi-input rounded-lg border-gray-300 dark:border-white/10 dark:bg-white/5 text-sm w-44 py-1.5">

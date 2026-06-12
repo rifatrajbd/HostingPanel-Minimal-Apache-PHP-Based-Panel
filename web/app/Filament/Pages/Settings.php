@@ -240,8 +240,21 @@ class Settings extends Page implements HasForms
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('gray')
                 ->requiresConfirmation()
-                ->modalDescription('Pull the latest code from your repo and redeploy. Sites and data are untouched.')
-                ->action(fn () => $this->ctlNotify('panel:self-update', 'panel.self_update')),
+                ->modalHeading('Update panel')
+                ->modalDescription('Pull the latest code from your repo and redeploy. Sites and data are untouched. '
+                    . 'Confirm with your account password.')
+                ->form([
+                    \Filament\Forms\Components\TextInput::make('password')
+                        ->label('Your account password')
+                        ->password()->required()->autocomplete('current-password'),
+                ])
+                ->action(function (array $data) {
+                    if (!\Illuminate\Support\Facades\Hash::check($data['password'], auth()->user()->password)) {
+                        Notification::make()->title('Incorrect password — update cancelled.')->danger()->send();
+                        return;
+                    }
+                    $this->ctlNotify('panel:self-update', 'panel.self_update');
+                }),
         ];
     }
 

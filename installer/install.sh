@@ -44,7 +44,7 @@ export DEBIAN_FRONTEND=noninteractive
 # ------------------------------------------------------------------ packages
 log "Updating apt and adding the ondrej/php PPA…"
 apt-get update -qq
-apt-get install -y -qq software-properties-common curl gnupg zip unzip git rsync openssl rclone
+apt-get install -y -qq software-properties-common curl gnupg zip unzip git rsync openssl rclone bind9-dnsutils
 add-apt-repository -y ppa:ondrej/php >/dev/null
 apt-get update -qq
 

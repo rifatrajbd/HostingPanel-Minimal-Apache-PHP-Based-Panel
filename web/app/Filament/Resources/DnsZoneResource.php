@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\DnsZoneResource\Pages;
-use App\Filament\Resources\DnsZoneResource\RelationManagers\RecordsRelationManager;
 use App\Models\DnsZone;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -44,16 +43,12 @@ class DnsZoneResource extends Resource
             ])
             ->actions([
                 Tables\Actions\Action::make('records')
+                    ->label('Manage records')
                     ->icon('heroicon-o-list-bullet')
-                    ->url(fn (DnsZone $z) => Pages\ViewDnsZone::getUrl(['record' => $z])),
+                    ->url(fn (DnsZone $z) => Pages\ManageDnsRecords::getUrl(['record' => $z])),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->emptyStateHeading('No DNS zones yet');
-    }
-
-    public static function getRelations(): array
-    {
-        return [RecordsRelationManager::class];
     }
 
     public static function getPages(): array
@@ -61,7 +56,7 @@ class DnsZoneResource extends Resource
         return [
             'index' => Pages\ListDnsZones::route('/'),
             'create' => Pages\CreateDnsZone::route('/create'),
-            'view' => Pages\ViewDnsZone::route('/{record}'),
+            'records' => Pages\ManageDnsRecords::route('/{record}/records'),
         ];
     }
 }

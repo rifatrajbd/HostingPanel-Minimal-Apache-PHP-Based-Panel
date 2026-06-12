@@ -13,7 +13,11 @@
       "Bash(php -l panelctl/src/FsCommands.php)",
       "Bash(php -r 'require \"panelctl/src/bootstrap.php\"; echo \"commands: \".count\\(Dispatcher::map\\(\\)\\).\"\\\\n\";')",
       "Bash(php panelctl/panelctl fs:search --domain forum.example.com --query conf --dry-run)",
-      "Bash(php panelctl/panelctl fs:list --domain forum.example.com --path / --sizes 1 --dry-run)"
+      "Bash(php panelctl/panelctl fs:list --domain forum.example.com --path / --sizes 1 --dry-run)",
+      "Bash(cd \"/d/Local Server/HostingPanel/web\" && rm -f app/Filament/Resources/DnsZoneResource/Pages/ViewDnsZone.php app/Filament/Resources/DnsZoneResource/RelationManagers/RecordsRelationManager.php && echo \"removed old view + relation manager\")"
+    ],
+    "additionalDirectories": [
+      "d:\\d\\Local Server\\HostingPanel\\web\\app\\Filament\\Resources\\DnsZoneResource\\Pages"
     ]
   }
 }

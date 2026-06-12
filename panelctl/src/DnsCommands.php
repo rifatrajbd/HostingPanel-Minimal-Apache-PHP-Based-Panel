@@ -69,6 +69,32 @@ final class DnsCommands
         return 0;
     }
 
+    /** Check whether the registrar's nameservers point to this server. */
+    public static function check(Ctx $ctx, array $flags): int
+    {
+        $zone = Validate::domain($flags['domain'] ?? '');
+        if ($ctx->dryRun) {
+            $ctx->out('[dry-run] dig NS ' . $zone);
+            return 0;
+        }
+        $expected = ["ns1.{$zone}", "ns2.{$zone}"];
+        $raw = $ctx->run(['dig', '+short', 'NS', $zone], null, true);
+        $found = array_values(array_filter(array_map(
+            fn ($l) => rtrim(trim($l), '.'),
+            explode("\n", trim($raw))
+        )));
+
+        if ($found === []) {
+            $ctx->out("No nameservers found for {$zone} yet (DNS may not have propagated).");
+        } else {
+            $ctx->out('Current nameservers: ' . implode(', ', $found));
+        }
+        $ctx->out(array_intersect($expected, $found) !== []
+            ? "OK — {$zone} is delegated to this server (ns1/ns2.{$zone})."
+            : "Not delegated here yet. Set your registrar's nameservers to ns1.{$zone} and ns2.{$zone}.");
+        return 0;
+    }
+
     /** @param array<string, string> $flags */
     public static function zoneDelete(Ctx $ctx, array $flags): int
     {

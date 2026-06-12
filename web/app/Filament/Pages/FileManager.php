@@ -10,9 +10,12 @@ use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Livewire\Attributes\Url;
+use Livewire\WithFileUploads;
 
 class FileManager extends Page
 {
+    use WithFileUploads;
+
     protected static ?string $navigationIcon = 'heroicon-o-folder';
     protected static ?string $navigationGroup = 'Hosting';
     protected static ?int $navigationSort = 4;
@@ -30,6 +33,9 @@ class FileManager extends Page
     public array $selected = [];
     public bool $showSizes = false;
     public ?string $listError = null;
+
+    /** Bound to the upload <input>; files auto-import the moment they're chosen. */
+    public $uploads = [];
 
     public string $search = '';
     public bool $searching = false;
@@ -265,18 +271,41 @@ class FileManager extends Page
 
     // --- actions with modals ----------------------------------------------
 
+    /** Fired by Livewire as soon as files are chosen — imports them at once. */
+    public function updatedUploads(): void
+    {
+        $site = $this->currentSite();
+        if (!$site || empty($this->uploads)) {
+            return;
+        }
+        $stage = config('hostingpanel.uploads');
+        if (!is_dir($stage)) {
+            @mkdir($stage, 0750, true);
+        }
+        $count = 0;
+        foreach ((array) $this->uploads as $file) {
+            $name = basename($file->getClientOriginalName());
+            $tmp = rtrim($stage, '/') . '/' . bin2hex(random_bytes(8)) . '-' . $name;
+            if (@copy($file->getRealPath(), $tmp)) {
+                $result = app(PanelCtl::class)->run('fs:import', [
+                    'domain' => $site->domain, 'path' => $this->join($this->path, $name), 'src' => $tmp,
+                ]);
+                @unlink($tmp);
+                $result->ok() ? $count++ : Notification::make()->title("Upload of {$name} failed")
+                    ->body($result->output())->danger()->send();
+            }
+        }
+        $this->uploads = [];
+        if ($count > 0) {
+            AuditLog::record('fs.upload', $site->domain . ':' . $this->path);
+            Notification::make()->title("{$count} file(s) uploaded")->success()->send();
+        }
+        $this->load();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('upload')
-                ->icon('heroicon-o-arrow-up-tray')
-                ->form([
-                    Forms\Components\FileUpload::make('files')
-                        ->multiple()->disk('local')->directory('fm-uploads')
-                        ->preserveFilenames()->maxSize(262144)->required(),
-                ])
-                ->action(fn (array $data) => $this->handleUpload($data['files'] ?? [])),
-
             Action::make('newFolder')
                 ->label('New Folder')->icon('heroicon-o-folder-plus')
                 ->form([Forms\Components\TextInput::make('name')->required()->regex('/^[^\/\\\\]{1,255}$/')])
@@ -347,38 +376,6 @@ class FileManager extends Page
     }
 
     // --- internals ---------------------------------------------------------
-
-    private function handleUpload(array $files): void
-    {
-        $site = $this->currentSite();
-        if (!$site) {
-            return;
-        }
-        $stage = config('hostingpanel.uploads');
-        if (!is_dir($stage)) {
-            @mkdir($stage, 0750, true);
-        }
-        $count = 0;
-        foreach ((array) $files as $stored) {
-            $full = storage_path('app/' . $stored);
-            $name = basename($full);
-            $tmp = rtrim($stage, '/') . '/' . bin2hex(random_bytes(8)) . '-' . $name;
-            if (@copy($full, $tmp)) {
-                $result = app(PanelCtl::class)->run('fs:import', [
-                    'domain' => $site->domain, 'path' => $this->join($this->path, $name), 'src' => $tmp,
-                ]);
-                @unlink($tmp);
-                @unlink($full);
-                $result->ok() ? $count++ : Notification::make()->title("Upload of {$name} failed")
-                    ->body($result->output())->danger()->send();
-            }
-        }
-        if ($count > 0) {
-            AuditLog::record('fs.upload', $site->domain . ':' . $this->path);
-            Notification::make()->title("{$count} file(s) uploaded")->success()->send();
-        }
-        $this->load();
-    }
 
     private function run(string $command, array $flags, string $audit, ?string $stdin = null): void
     {

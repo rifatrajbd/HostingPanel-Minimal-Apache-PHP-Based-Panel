@@ -18,6 +18,6 @@ class CreateDnsZone extends CreateRecord
     protected function getRedirectUrl(): string
     {
         // Straight to record management after the zone (SOA/NS) is created.
-        return $this->getResource()::getUrl('view', ['record' => $this->record]);
+        return $this->getResource()::getUrl('records', ['record' => $this->record]);
     }
 }
