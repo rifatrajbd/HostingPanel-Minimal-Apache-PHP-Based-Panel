@@ -9,7 +9,7 @@ class Site extends Model
 {
     protected $fillable = [
         'domain', 'php_version', 'doc_root', 'system_user',
-        'ssl_enabled', 'cf_only', 'ini',
+        'ssl_enabled', 'cf_only', 'ini', 'ip_mode',
     ];
 
     protected $casts = [

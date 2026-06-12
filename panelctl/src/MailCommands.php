@@ -33,14 +33,24 @@ final class MailCommands
 
         self::webmailDomainConfig($ctx, $domain);
 
+        $ipv4 = Net::ipv4();
+        $ipv6 = Net::ipv6();
+
         // Print the DNS records the user must create (panel stores this output).
         $ctx->out("# DNS records for {$domain} — create these at your DNS provider:");
+        if ($ipv4 !== null) {
+            $ctx->out("mail.{$domain}.  A     {$ipv4}");
+        }
+        if ($ipv6 !== null) {
+            $ctx->out("mail.{$domain}.  AAAA  {$ipv6}");
+        }
         $ctx->out("{$domain}.  MX 10  mail.{$domain}.");
+        // SPF authorises both A and AAAA of the MX automatically via "mx".
         $ctx->out("{$domain}.  TXT  \"v=spf1 mx -all\"");
         $ctx->out(trim($dnsRecord));
         $ctx->out("_dmarc.{$domain}.  TXT  \"v=DMARC1; p=quarantine; rua=mailto:postmaster@{$domain}\"");
-        $ctx->out("# Also: point mail.{$domain} A record to this server, and ask your VPS");
-        $ctx->out("# provider to set the PTR (reverse DNS) of your IP to mail.{$domain}");
+        $ctx->out('# Reverse DNS (PTR): ask your VPS provider to set the PTR of your');
+        $ctx->out("# IPv4" . ($ipv6 !== null ? ' AND IPv6' : '') . " address to mail.{$domain} — required for good deliverability.");
         return 0;
     }
 

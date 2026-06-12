@@ -6,7 +6,10 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <dl class="text-sm space-y-2">
                 <div class="flex justify-between"><dt class="text-gray-500">Host</dt><dd class="font-mono">{{ $s['hostname'] }}</dd></div>
-                <div class="flex justify-between"><dt class="text-gray-500">OS</dt><dd>{{ $s['os'] }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-gray-500">IPv4</dt>
+                    <dd class="font-mono truncate">{{ $s['ipv4'] ?? '—' }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-gray-500">IPv6</dt>
+                    <dd class="font-mono truncate">{{ $s['ipv6'] ?? 'not configured' }}</dd></div>
                 <div class="flex justify-between"><dt class="text-gray-500">Uptime</dt><dd>{{ $s['uptime'] }}</dd></div>
                 <div class="flex justify-between"><dt class="text-gray-500">Load</dt>
                     <dd class="font-mono">{{ implode(' / ', $s['load']) }} <span class="text-gray-400">· {{ $s['cpu_count'] }} cores</span></dd></div>

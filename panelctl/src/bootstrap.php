@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/Ctx.php';
 require __DIR__ . '/Validate.php';
+require __DIR__ . '/Net.php';
 require __DIR__ . '/SiteCommands.php';
 require __DIR__ . '/DbCommands.php';
 require __DIR__ . '/MailCommands.php';
@@ -35,6 +36,7 @@ final class Dispatcher
             'site:php' => [PhpCommands::class, 'sitePhp'],
             'site:ini' => [PhpCommands::class, 'siteIni'],
             'site:cfonly' => [AccessCommands::class, 'siteCfOnly'],
+            'site:ipmode' => [AccessCommands::class, 'siteIpMode'],
             'cf:update' => [AccessCommands::class, 'cfUpdate'],
             'ssl:issue' => [SslCommands::class, 'issue'],
             'ssl:list' => [SslCommands::class, 'list'],

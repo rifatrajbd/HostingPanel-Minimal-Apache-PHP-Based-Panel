@@ -11,6 +11,8 @@ class SystemStats
     /** @return array<string, mixed> */
     public function snapshot(): array
     {
+        $addresses = $this->addresses();
+
         return [
             'load' => $this->load(),
             'cpu_count' => $this->cpuCount(),
@@ -18,9 +20,44 @@ class SystemStats
             'disk' => $this->disk(),
             'uptime' => $this->uptime(),
             'hostname' => php_uname('n'),
+            'ipv4' => $addresses['ipv4'],
+            'ipv6' => $addresses['ipv6'],
             'os' => PHP_OS_FAMILY === 'Linux'
                 ? trim((string) @file_get_contents('/etc/issue.net')) : php_uname('s'),
         ];
+    }
+
+    /**
+     * Primary outbound IPv4 / IPv6 of this server. Uses a UDP "connect"
+     * (no packets are sent) so the kernel picks the source address from
+     * the routing table — returns null for a family with no route.
+     *
+     * @return array{ipv4: ?string, ipv6: ?string}
+     */
+    public function addresses(): array
+    {
+        return [
+            'ipv4' => $this->primaryAddress('udp://1.1.1.1:53'),
+            'ipv6' => $this->primaryAddress('udp://[2606:4700:4700::1111]:53'),
+        ];
+    }
+
+    private function primaryAddress(string $target): ?string
+    {
+        $sock = @stream_socket_client($target, $errno, $errstr, 1);
+        if ($sock === false) {
+            return null;
+        }
+        $name = @stream_socket_get_name($sock, false); // "ip:port" or "[ip]:port"
+        fclose($sock);
+        if (!is_string($name) || $name === '') {
+            return null;
+        }
+        // Strip the trailing :port (IPv6 is wrapped in [...]).
+        if ($name[0] === '[') {
+            return substr($name, 1, strpos($name, ']') - 1);
+        }
+        return substr($name, 0, strrpos($name, ':'));
     }
 
     private function load(): array

@@ -54,6 +54,43 @@ final class AccessCommands
         return 0;
     }
 
+    /**
+     * Restrict which IP family a site is served over.
+     *   both  — respond on IPv4 and IPv6 (default; removes the restriction)
+     *   ipv4  — IPv4 only  (deny IPv6 clients)
+     *   ipv6  — IPv6 only  (deny IPv4 clients)
+     * "both off" is impossible: the only valid modes are the three above.
+     *
+     * Written as a per-site include so it applies to both the :80 and the
+     * certbot-generated :443 vhost.
+     */
+    public static function siteIpMode(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        $mode = $flags['mode'] ?? 'both';
+        if (!in_array($mode, ['both', 'ipv4', 'ipv6'], true)) {
+            throw new InvalidArgumentException('IP mode must be both, ipv4 or ipv6.');
+        }
+        $file = self::ACCESS_DIR . "/{$domain}.ipmode.conf";
+
+        if ($mode === 'both') {
+            $ctx->deletePath($file);
+            $ctx->out("Site {$domain} is served over both IPv4 and IPv6.");
+        } else {
+            // IPv6 client addresses contain a colon; IPv4 ones do not.
+            $condition = $mode === 'ipv4' ? '%{REMOTE_ADDR} =~ /:/' : '! (%{REMOTE_ADDR} =~ /:/)';
+            $denied = $mode === 'ipv4' ? 'IPv6' : 'IPv4';
+            $ctx->writeFile(
+                $file,
+                "# {$denied} disabled for this site by HostingPanel\n"
+                . "<If \"{$condition}\">\n    Require all denied\n</If>\n"
+            );
+            $ctx->out("Site {$domain} is now " . strtoupper($mode) . "-only ({$denied} clients are refused).");
+        }
+        $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
+        return 0;
+    }
+
     /** Toggle Cloudflare-only access for one site. */
     public static function siteCfOnly(Ctx $ctx, array $flags): int
     {

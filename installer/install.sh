@@ -259,6 +259,7 @@ for f in mysql-virtual-mailbox-domains.cf mysql-virtual-mailbox-maps.cf mysql-vi
 done
 
 postconf -e "myhostname = ${MAIL_HOSTNAME}"
+postconf -e "inet_protocols = all"   # accept/deliver mail over IPv4 and IPv6
 postconf -e "mydestination = localhost"
 postconf -e "virtual_mailbox_domains = mysql:/etc/postfix/mysql/mysql-virtual-mailbox-domains.cf"
 postconf -e "virtual_mailbox_maps = mysql:/etc/postfix/mysql/mysql-virtual-mailbox-maps.cf"
@@ -322,6 +323,9 @@ ADMIN_OUTPUT="$(cd "${WEB}" && sudo -u hostingpanel php artisan hostingpanel:adm
 
 # ------------------------------------------------------------------ firewall + fail2ban
 log "Configuring UFW and fail2ban…"
+# Ensure UFW manages IPv6 too (default on modern Ubuntu, but make it certain).
+sed -i 's/^IPV6=.*/IPV6=yes/' /etc/default/ufw 2>/dev/null || true
+grep -q '^IPV6=' /etc/default/ufw || echo "IPV6=yes" >> /etc/default/ufw
 ufw allow OpenSSH >/dev/null
 for port in 80 443 8443 25 587 993; do ufw allow "${port}/tcp" >/dev/null; done
 ufw --force enable >/dev/null
@@ -340,6 +344,7 @@ systemctl enable -q apache2 mariadb postfix dovecot rspamd fail2ban
 
 # ------------------------------------------------------------------ done
 SERVER_IP="$(curl -fsS -4 --connect-timeout 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
+SERVER_IP6="$(curl -fsS -6 --connect-timeout 10 https://api64.ipify.org 2>/dev/null || true)"
 echo
 echo "=============================================================="
 echo "  HostingPanel installed!"
@@ -349,6 +354,9 @@ echo "              (self-signed certificate — accept the browser warning,"
 echo "               or set a panel domain on the Settings page for a real cert)"
 echo "  phpMyAdmin: https://${SERVER_IP}:8443/phpmyadmin/"
 echo "  Webmail:    https://${SERVER_IP}:8443/webmail/"
+echo
+echo "  Server IPv4: ${SERVER_IP}"
+[[ -n "${SERVER_IP6}" ]] && echo "  Server IPv6: ${SERVER_IP6}" || echo "  Server IPv6: (none detected)"
 echo
 echo "  ${ADMIN_OUTPUT//$'\n'/$'\n'  }"
 echo

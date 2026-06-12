@@ -49,6 +49,12 @@ class ManageSite extends Page implements HasForms
         return $this->record->domain;
     }
 
+    /** @return array{ipv4: ?string, ipv6: ?string} */
+    public function serverAddresses(): array
+    {
+        return app(\App\Services\SystemStats::class)->addresses();
+    }
+
     protected function getForms(): array
     {
         return ['phpForm', 'cronForm'];
@@ -198,6 +204,35 @@ class ManageSite extends Page implements HasForms
                     if ($result->ok()) {
                         $this->record->update(['cf_only' => $enable]);
                         AuditLog::record('site.cfonly', $this->record->domain . ($enable ? ' on' : ' off'));
+                        Notification::make()->title($result->output())->success()->send();
+                    } else {
+                        Notification::make()->title('Failed')->body($result->output())->danger()->persistent()->send();
+                    }
+                }),
+
+            Actions\Action::make('ipMode')
+                ->label('IP mode: ' . strtoupper($this->record->ip_mode))
+                ->icon('heroicon-o-signal')
+                ->color('gray')
+                ->form([
+                    Forms\Components\Radio::make('mode')
+                        ->label('Serve this site over')
+                        ->options([
+                            'both' => 'IPv4 and IPv6 (default)',
+                            'ipv4' => 'IPv4 only — refuse IPv6 clients',
+                            'ipv6' => 'IPv6 only — refuse IPv4 clients',
+                        ])
+                        ->default($this->record->ip_mode)
+                        ->required(),
+                ])
+                ->action(function (array $data) {
+                    $result = app(PanelCtl::class)->run('site:ipmode', [
+                        'domain' => $this->record->domain,
+                        'mode' => $data['mode'],
+                    ]);
+                    if ($result->ok()) {
+                        $this->record->update(['ip_mode' => $data['mode']]);
+                        AuditLog::record('site.ipmode', "{$this->record->domain} {$data['mode']}");
                         Notification::make()->title($result->output())->success()->send();
                     } else {
                         Notification::make()->title('Failed')->body($result->output())->danger()->persistent()->send();

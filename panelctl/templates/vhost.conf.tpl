@@ -18,8 +18,10 @@
         Require all denied
     </FilesMatch>
 
-    # Per-site access rules (e.g. Cloudflare-only mode)
+    # Per-site access rules (Cloudflare-only and IPv4/IPv6 mode).
+    # Copied into the certbot SSL vhost too, so both HTTP and HTTPS honour them.
     IncludeOptional /etc/hostingpanel/site-access/{{domain}}.conf
+    IncludeOptional /etc/hostingpanel/site-access/{{domain}}.ipmode.conf
 
     ErrorLog {{home}}/logs/error.log
     CustomLog {{home}}/logs/access.log combined

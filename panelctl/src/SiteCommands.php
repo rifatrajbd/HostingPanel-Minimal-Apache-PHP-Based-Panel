@@ -82,6 +82,8 @@ final class SiteCommands
             }
         }
 
+        $ctx->deletePath("/etc/hostingpanel/site-access/{$domain}.conf");
+        $ctx->deletePath("/etc/hostingpanel/site-access/{$domain}.ipmode.conf");
         $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
         $ctx->run(['certbot', 'delete', '--non-interactive', '--cert-name', $domain], null, true);
         $ctx->run(['userdel', $user], null, true, null, true);
