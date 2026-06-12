@@ -25,23 +25,91 @@ final class FsCommands
         if (!is_dir($dir)) {
             throw new InvalidArgumentException('Not a directory.');
         }
+        $withSizes = ($flags['sizes'] ?? '') === '1';
         $items = [];
         foreach (scandir($dir) ?: [] as $name) {
             if ($name === '.' || $name === '..') {
                 continue;
             }
             $full = $dir . '/' . $name;
+            $isDir = is_dir($full) && !is_link($full);
+            $size = is_file($full) ? (int) filesize($full) : 0;
+            if ($isDir && $withSizes) {
+                $size = self::dirSize($ctx, $full);
+            }
             $items[] = [
                 'name' => $name,
-                'dir' => is_dir($full) && !is_link($full),
-                'size' => is_file($full) ? filesize($full) : 0,
+                'dir' => $isDir,
+                'link' => is_link($full),
+                'size' => $size,
                 'mode' => substr(sprintf('%o', fileperms($full)), -3),
                 'mtime' => filemtime($full),
+                'owner' => self::ownerOf($full),
             ];
         }
         usort($items, fn ($a, $b) => [$b['dir'], strtolower($a['name'])] <=> [$a['dir'], strtolower($b['name'])]);
         $ctx->out((string) json_encode($items));
         return 0;
+    }
+
+    /** Recursive search by filename under the site, newest first (JSON list). */
+    public static function search(Ctx $ctx, array $flags): int
+    {
+        [$base] = self::base($flags);
+        if ($ctx->dryRun) {
+            $ctx->out('[]');
+            return 0;
+        }
+        $query = trim((string) ($flags['query'] ?? ''));
+        if (strlen($query) < 2) {
+            throw new InvalidArgumentException('Search term must be at least 2 characters.');
+        }
+
+        $out = $ctx->run([
+            'find', $base, '-maxdepth', '8', '-iname', '*' . $query . '*',
+            '-printf', "%y\t%s\t%T@\t%m\t%p\n",
+        ], null, true);
+
+        $items = [];
+        foreach (explode("\n", trim($out)) as $line) {
+            if ($line === '') {
+                continue;
+            }
+            [$type, $size, $mtime, $mode, $full] = array_pad(explode("\t", $line, 5), 5, '');
+            if ($full === $base) {
+                continue;
+            }
+            $rel = substr($full, strlen($base));
+            $items[] = [
+                'name' => basename($full),
+                'path' => $rel === '' ? '/' : $rel,
+                'dir' => $type === 'd',
+                'size' => (int) $size,
+                'mode' => substr($mode, -3) ?: '644',
+                'mtime' => (int) $mtime,
+            ];
+            if (count($items) >= 500) {
+                break;
+            }
+        }
+        $ctx->out((string) json_encode($items));
+        return 0;
+    }
+
+    private static function dirSize(Ctx $ctx, string $path): int
+    {
+        $out = $ctx->run(['du', '-sb', '--', $path], null, true);
+        return (int) strtok(trim($out), "\t");
+    }
+
+    private static function ownerOf(string $path): string
+    {
+        if (!function_exists('posix_getpwuid')) {
+            return '';
+        }
+        $u = @posix_getpwuid((int) @fileowner($path));
+        $g = @posix_getgrgid((int) @filegroup($path));
+        return ($u['name'] ?? '?') . '/' . ($g['name'] ?? '?');
     }
 
     /** @param array<string, string> $flags */

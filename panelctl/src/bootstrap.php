@@ -74,6 +74,7 @@ final class Dispatcher
             'mail:queue:delete' => [MailCommands::class, 'queueDelete'],
             'mail:log' => [MailCommands::class, 'log'],
             'fs:list' => [FsCommands::class, 'list'],
+            'fs:search' => [FsCommands::class, 'search'],
             'fs:read' => [FsCommands::class, 'read'],
             'fs:write' => [FsCommands::class, 'write'],
             'fs:import' => [FsCommands::class, 'import'],
