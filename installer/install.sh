@@ -270,14 +270,17 @@ gmysql-dbname=powerdns
 gmysql-user=powerdns
 gmysql-password=${PDNS_PASSWORD}
 EOF
-chmod 640 /etc/powerdns/pdns.d/gmysql.conf
 # Remove the default bind backend config if present (we use gmysql only).
 rm -f /etc/powerdns/pdns.d/bind.conf /etc/powerdns/bindbackend.conf 2>/dev/null || true
 # Bind only to public IPs so we don't clash with systemd-resolved on 127.0.0.53.
 DNS_ADDR="$(hostname -I | tr ' ' '\n' | grep -vE '^127\.|^::1' | paste -sd, -)"
 [[ -n "${DNS_ADDR}" ]] && echo "local-address=${DNS_ADDR}" >> /etc/powerdns/pdns.d/gmysql.conf
+# pdns runs as the "pdns" user and reads this config AFTER dropping privileges,
+# so it must be group-readable by pdns (it holds the DB password — not world).
+chown root:pdns /etc/powerdns/pdns.d/gmysql.conf
+chmod 640 /etc/powerdns/pdns.d/gmysql.conf
 systemctl enable -q pdns
-systemctl restart pdns || log "WARNING: pdns failed to start — check 'systemctl status pdns' (often a :53 conflict with systemd-resolved)."
+systemctl restart pdns || log "WARNING: pdns failed to start — check 'systemctl status pdns'."
 
 # ------------------------------------------------------------------ SFTP (chrooted accounts)
 log "Configuring chrooted SFTP…"
