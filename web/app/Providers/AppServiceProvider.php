@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\DatabaseUser;
 use App\Models\DnsRecord;
 use App\Models\DnsZone;
 use App\Models\FtpAccount;
@@ -9,6 +10,7 @@ use App\Models\MailDomain;
 use App\Models\Mailbox;
 use App\Models\Site;
 use App\Models\SiteDatabase;
+use App\Observers\DatabaseUserObserver;
 use App\Observers\DnsObserver;
 use App\Observers\FtpAccountObserver;
 use App\Observers\MailboxObserver;
@@ -33,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
         MailDomain::observe(MailDomainObserver::class);
         Mailbox::observe(MailboxObserver::class);
         FtpAccount::observe(FtpAccountObserver::class);
+        DatabaseUser::observe(DatabaseUserObserver::class);
 
         // DNS: keep PowerDNS in sync with the panel's zone/record tables.
         DnsZone::created(fn (DnsZone $z) => app(DnsObserver::class)->zoneCreated($z));

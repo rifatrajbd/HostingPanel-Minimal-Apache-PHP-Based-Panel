@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\FilesController;
 use Illuminate\Support\Facades\Route;
 
@@ -8,4 +9,5 @@ Route::middleware('auth')->group(function () {
     Route::get('/files/download', [FilesController::class, 'download'])->name('files.download');
     Route::get('/files/edit', [FilesController::class, 'edit'])->name('files.edit');
     Route::post('/files/save', [FilesController::class, 'save'])->name('files.save');
+    Route::get('/databases/{database}/export', [DatabaseController::class, 'export'])->name('databases.export');
 });

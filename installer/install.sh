@@ -95,6 +95,7 @@ id vmail &>/dev/null || \
 
 install -d -o hostingpanel -g hostingpanel -m 750 /var/lib/hostingpanel
 install -d -o hostingpanel -g hostingpanel -m 750 /var/lib/hostingpanel/uploads
+install -d -o hostingpanel -g hostingpanel -m 750 /var/lib/hostingpanel/exports
 install -d -o hostingpanel -g hostingpanel -m 750 /var/lib/hostingpanel/pma-tmp
 install -d -o hostingpanel -g hostingpanel -m 750 /var/lib/hostingpanel/webmail-data
 install -d -o hostingpanel -g hostingpanel -m 750 /var/log/hostingpanel

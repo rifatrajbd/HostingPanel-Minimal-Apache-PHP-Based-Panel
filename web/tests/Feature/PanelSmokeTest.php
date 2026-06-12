@@ -36,7 +36,7 @@ class PanelSmokeTest extends TestCase
             'doc_root' => '/var/www/forum.example.com/htdocs',
             'system_user' => 'web-forumexamplecom', 'ini' => [],
         ]);
-        SiteDatabase::create(['name' => 'mybb', 'db_user' => 'mybb_user']);
+        $db = SiteDatabase::create(['name' => 'mybb', 'db_user' => 'mybb_user']);
         MailDomain::create(['domain' => 'example.com', 'dkim_dns' => 'TXT ...']);
 
         $zone = \App\Models\DnsZone::create(['domain' => 'example.com']);
@@ -55,6 +55,7 @@ class PanelSmokeTest extends TestCase
             '/file-manager',
             '/site-databases',
             '/site-databases/create',
+            "/site-databases/{$db->id}/users",
             '/dns-zones',
             '/dns-zones/create',
             "/dns-zones/{$zone->id}",

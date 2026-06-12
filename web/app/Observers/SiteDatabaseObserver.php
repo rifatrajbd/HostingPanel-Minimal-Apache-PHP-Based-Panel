@@ -22,6 +22,12 @@ class SiteDatabaseObserver
             return false;
         }
 
+        // Drop any additional MySQL users attached to this database.
+        $ctl = app(PanelCtl::class);
+        foreach ($db->users as $extra) {
+            $ctl->run('db:user:delete', ['user' => $extra->username]);
+        }
+
         AuditLog::record('db.delete', $db->name);
         return true;
     }
