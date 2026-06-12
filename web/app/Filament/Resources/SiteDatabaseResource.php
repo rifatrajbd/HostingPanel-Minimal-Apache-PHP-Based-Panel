@@ -92,6 +92,7 @@ class SiteDatabaseResource extends Resource
                         Forms\Components\FileUpload::make('file')
                             ->label('SQL file (.sql or .sql.gz)')
                             ->disk('local')->directory('db-imports')->preserveFilenames()
+                            ->maxSize(262144) // 256 MB
                             ->required(),
                     ])
                     ->action(fn (SiteDatabase $record, array $data) => static::import($record, $data['file'])),

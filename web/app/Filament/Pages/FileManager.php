@@ -119,6 +119,7 @@ class FileManager extends Page
                         ->disk('local')
                         ->directory('fm-uploads')
                         ->preserveFilenames()
+                        ->maxSize(262144) // 256 MB
                         ->required(),
                 ])
                 ->action(fn (array $data) => $this->handleUpload($data['files'] ?? [])),

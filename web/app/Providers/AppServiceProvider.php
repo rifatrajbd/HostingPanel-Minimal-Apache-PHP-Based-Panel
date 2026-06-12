@@ -30,6 +30,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Livewire caps temporary uploads at 12 MB by default, which blocks
+        // SQL-dump and large file-manager uploads. Lift it to the panel's
+        // PHP limit (256 MB). Works even with a cached config.
+        config(['livewire.temporary_file_upload.rules' => ['required', 'file', 'max:262144']]);
+
         Site::observe(SiteObserver::class);
         SiteDatabase::observe(SiteDatabaseObserver::class);
         MailDomain::observe(MailDomainObserver::class);
