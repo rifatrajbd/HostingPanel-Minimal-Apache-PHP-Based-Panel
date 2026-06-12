@@ -3,16 +3,13 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\SiteDatabaseResource\Pages;
-use App\Models\AuditLog;
 use App\Models\SiteDatabase;
 use App\Services\PanelCtl;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Support\Str;
 
 class SiteDatabaseResource extends Resource
 {
@@ -73,41 +70,17 @@ class SiteDatabaseResource extends Resource
             ])
             ->actions([
                 Tables\Actions\Action::make('manage')
-                    ->label('Users')
-                    ->icon('heroicon-o-users')
-                    ->url(fn (SiteDatabase $r) => Pages\ManageDatabaseUsers::getUrl(['record' => $r])),
-
-                Tables\Actions\Action::make('export')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->color('gray')
-                    ->url(fn (SiteDatabase $r) => route('databases.export', $r))
-                    ->openUrlInNewTab(),
-
-                Tables\Actions\Action::make('import')
-                    ->icon('heroicon-o-arrow-up-tray')
-                    ->color('gray')
-                    ->requiresConfirmation()
-                    ->modalDescription('Importing runs the uploaded SQL against this database. Existing tables in the dump are overwritten.')
-                    ->form([
-                        Forms\Components\FileUpload::make('file')
-                            ->label('SQL file (.sql or .sql.gz)')
-                            ->disk('local')->directory('db-imports')->preserveFilenames()
-                            ->maxSize(262144) // 256 MB
-                            ->required(),
-                    ])
-                    ->action(fn (SiteDatabase $record, array $data) => static::import($record, $data['file'])),
-
-                Tables\Actions\Action::make('password')
-                    ->label('Reset password')
-                    ->icon('heroicon-o-key')
-                    ->color('gray')
-                    ->form([
-                        Forms\Components\TextInput::make('password')->password()->revealable()
-                            ->minLength(12)->helperText('Leave blank to auto-generate.'),
-                    ])
-                    ->action(fn (SiteDatabase $record, array $data) => static::resetPassword($record, $data['password'] ?? '')),
-
+                    ->label('Manage')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->url(fn (SiteDatabase $r) => Pages\ManageDatabase::getUrl(['record' => $r])),
                 Tables\Actions\DeleteAction::make(),
+            ])
+            ->headerActions([
+                Tables\Actions\Action::make('phpmyadmin')
+                    ->label('phpMyAdmin')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->color('gray')
+                    ->url('/phpmyadmin/', shouldOpenInNewTab: true),
             ])
             ->emptyStateHeading('No databases yet');
     }
@@ -117,49 +90,7 @@ class SiteDatabaseResource extends Resource
         return [
             'index' => Pages\ListSiteDatabases::route('/'),
             'create' => Pages\CreateSiteDatabase::route('/create'),
-            'users' => Pages\ManageDatabaseUsers::route('/{record}/users'),
+            'manage' => Pages\ManageDatabase::route('/{record}/manage'),
         ];
-    }
-
-    private static function resetPassword(SiteDatabase $record, string $password): void
-    {
-        $generated = $password === '';
-        $password = $generated ? Str::password(20, symbols: false) : $password;
-
-        $result = app(PanelCtl::class)->run('db:password', ['user' => $record->db_user], $password . "\n");
-        if ($result->ok()) {
-            AuditLog::record('db.password', $record->db_user);
-            Notification::make()->title("Password reset for {$record->db_user}")
-                ->body($generated ? "New password: {$password}" : null)
-                ->success()->persistent()->send();
-        } else {
-            Notification::make()->title('Failed')->body($result->output())->danger()->persistent()->send();
-        }
-    }
-
-    private static function import(SiteDatabase $record, string $stored): void
-    {
-        $full = storage_path('app/' . $stored);
-        $stage = config('hostingpanel.uploads');
-        if (!is_dir($stage)) {
-            @mkdir($stage, 0750, true);
-        }
-        $tmp = rtrim($stage, '/') . '/' . bin2hex(random_bytes(8)) . '-' . basename($full);
-
-        if (!@copy($full, $tmp)) {
-            Notification::make()->title('Could not stage the upload')->danger()->send();
-            return;
-        }
-        @unlink($full);
-
-        $result = app(PanelCtl::class)->run('db:import', ['name' => $record->name, 'src' => $tmp]);
-        @unlink($tmp);
-
-        if ($result->ok()) {
-            AuditLog::record('db.import', $record->name);
-            Notification::make()->title($result->output())->success()->send();
-        } else {
-            Notification::make()->title('Import failed')->body($result->output())->danger()->persistent()->send();
-        }
     }
 }

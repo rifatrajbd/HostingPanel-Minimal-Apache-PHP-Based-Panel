@@ -55,7 +55,7 @@ class PanelSmokeTest extends TestCase
             '/file-manager',
             '/site-databases',
             '/site-databases/create',
-            "/site-databases/{$db->id}/users",
+            "/site-databases/{$db->id}/manage",
             '/dns-zones',
             '/dns-zones/create',
             "/dns-zones/{$zone->id}",
