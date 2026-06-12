@@ -15,4 +15,7 @@ return [
 
     // Staging dir for file-manager uploads (panel user must own it).
     'uploads' => env('PANEL_UPLOADS', '/var/lib/hostingpanel/uploads'),
+
+    // Failed panel logins are appended here for the fail2ban jail to watch.
+    'auth_log' => env('PANEL_AUTH_LOG', '/var/log/hostingpanel/auth.log'),
 ];

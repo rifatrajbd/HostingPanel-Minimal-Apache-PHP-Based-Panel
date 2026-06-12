@@ -14,6 +14,13 @@
             </div>
         </form>
 
+        <form wire:submit="saveAliases">
+            {{ $this->aliasForm }}
+            <div class="mt-4">
+                <x-filament::button type="submit">Save domains</x-filament::button>
+            </div>
+        </form>
+
         @php($ips = $this->serverAddresses())
         <x-filament::section>
             <x-slot name="heading">DNS records</x-slot>

@@ -19,3 +19,13 @@ enabled = true
 
 [apache-badbots]
 enabled = true
+
+# Brute-force protection for the HostingPanel login itself.
+[hostingpanel-panel]
+enabled  = true
+filter   = hostingpanel
+logpath  = /var/log/hostingpanel/auth.log
+port     = 8443
+maxretry = 5
+findtime = 15m
+bantime  = 1h

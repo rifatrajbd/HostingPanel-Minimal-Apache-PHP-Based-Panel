@@ -39,6 +39,12 @@ class PanelSmokeTest extends TestCase
         SiteDatabase::create(['name' => 'mybb', 'db_user' => 'mybb_user']);
         MailDomain::create(['domain' => 'example.com', 'dkim_dns' => 'TXT ...']);
 
+        $zone = \App\Models\DnsZone::create(['domain' => 'example.com']);
+        \App\Models\DnsRecord::create([
+            'dns_zone_id' => $zone->id, 'type' => 'A', 'name' => '@', 'content' => '203.0.113.1',
+        ]);
+        \App\Models\FtpAccount::create(['username' => 'siteftp', 'site_id' => $site->id]);
+
         $this->actingAs($this->admin());
 
         $urls = [
@@ -49,6 +55,11 @@ class PanelSmokeTest extends TestCase
             '/file-manager',
             '/site-databases',
             '/site-databases/create',
+            '/dns-zones',
+            '/dns-zones/create',
+            "/dns-zones/{$zone->id}",
+            '/ftp-accounts',
+            '/ftp-accounts/create',
             '/mail-domains',
             '/mail-domains/create',
             '/mail-queue',

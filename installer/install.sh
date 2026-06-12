@@ -49,7 +49,8 @@ add-apt-repository -y ppa:ondrej/php >/dev/null
 apt-get update -qq
 
 log "Installing Apache, MariaDB, certbot, UFW, fail2ban…"
-apt-get install -y -qq apache2 mariadb-server python3-certbot-apache ufw fail2ban
+apt-get install -y -qq apache2 mariadb-server python3-certbot-apache ufw fail2ban \
+    pdns-server pdns-backend-mysql unattended-upgrades
 
 log "Installing PHP ${PHP_VERSIONS[*]} (FPM + common extensions)…"
 for v in "${PHP_VERSIONS[@]}"; do
@@ -248,6 +249,62 @@ mysql -e "ALTER USER 'mailserver'@'127.0.0.1' IDENTIFIED BY '${MAILDB_PASSWORD}'
 mysql -e "GRANT SELECT, INSERT, UPDATE, DELETE ON mailserver.* TO 'mailserver'@'127.0.0.1'"
 mysql mailserver < "${INSTALL_DIR}/etc/mailserver-schema.sql"
 
+# ------------------------------------------------------------------ PowerDNS (authoritative DNS)
+log "Configuring PowerDNS (authoritative DNS server)…"
+PDNS_PASSWORD="$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)"
+mysql -e "CREATE DATABASE IF NOT EXISTS powerdns CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql -e "CREATE USER IF NOT EXISTS 'powerdns'@'127.0.0.1' IDENTIFIED BY '${PDNS_PASSWORD}'"
+mysql -e "ALTER USER 'powerdns'@'127.0.0.1' IDENTIFIED BY '${PDNS_PASSWORD}'"
+mysql -e "GRANT ALL PRIVILEGES ON powerdns.* TO 'powerdns'@'127.0.0.1'"
+# panelctl runs as root and uses the unix-socket mysql as root, but pdns needs
+# a password user; the schema is loaded once.
+mysql powerdns < "${INSTALL_DIR}/etc/powerdns-schema.sql"
+
+# Bind pdns only to the public addresses so it doesn't clash with
+# systemd-resolved (which keeps 127.0.0.53 for the host's own lookups).
+install -d -m 755 /etc/powerdns/pdns.d
+cat > /etc/powerdns/pdns.d/gmysql.conf <<EOF
+launch=gmysql
+gmysql-host=127.0.0.1
+gmysql-dbname=powerdns
+gmysql-user=powerdns
+gmysql-password=${PDNS_PASSWORD}
+EOF
+chmod 640 /etc/powerdns/pdns.d/gmysql.conf
+# Remove the default bind backend config if present (we use gmysql only).
+rm -f /etc/powerdns/pdns.d/bind.conf /etc/powerdns/bindbackend.conf 2>/dev/null || true
+# Bind only to public IPs so we don't clash with systemd-resolved on 127.0.0.53.
+DNS_ADDR="$(hostname -I | tr ' ' '\n' | grep -vE '^127\.|^::1' | paste -sd, -)"
+[[ -n "${DNS_ADDR}" ]] && echo "local-address=${DNS_ADDR}" >> /etc/powerdns/pdns.d/gmysql.conf
+systemctl enable -q pdns
+systemctl restart pdns || log "WARNING: pdns failed to start — check 'systemctl status pdns' (often a :53 conflict with systemd-resolved)."
+
+# ------------------------------------------------------------------ SFTP (chrooted accounts)
+log "Configuring chrooted SFTP…"
+getent group sftponly >/dev/null || groupadd sftponly
+cat > /etc/ssh/sshd_config.d/hostingpanel-sftp.conf <<'EOF'
+# HostingPanel: chrooted SFTP-only accounts (no shell, no port forwarding).
+Match Group sftponly
+    ChrootDirectory %h
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no
+    PasswordAuthentication yes
+EOF
+systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+
+# ------------------------------------------------------------------ certbot DNS-01 hooks (wildcard SSL)
+install -m 755 "${INSTALL_DIR}/scripts/hp-acme-auth.sh" /usr/local/bin/hp-acme-auth
+install -m 755 "${INSTALL_DIR}/scripts/hp-acme-cleanup.sh" /usr/local/bin/hp-acme-cleanup
+
+# ------------------------------------------------------------------ unattended security upgrades
+log "Enabling automatic security updates…"
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+systemctl enable -q unattended-upgrades 2>/dev/null || true
+
 # ------------------------------------------------------------------ postfix
 log "Configuring Postfix…"
 install -d -m 750 -o root -g postfix /etc/postfix/mysql
@@ -328,9 +385,16 @@ sed -i 's/^IPV6=.*/IPV6=yes/' /etc/default/ufw 2>/dev/null || true
 grep -q '^IPV6=' /etc/default/ufw || echo "IPV6=yes" >> /etc/default/ufw
 ufw allow OpenSSH >/dev/null
 for port in 80 443 8443 25 587 993; do ufw allow "${port}/tcp" >/dev/null; done
+# Authoritative DNS (PowerDNS) needs 53 on both TCP and UDP.
+ufw allow 53/tcp >/dev/null
+ufw allow 53/udp >/dev/null
 ufw --force enable >/dev/null
 
 cp "${INSTALL_DIR}/etc/fail2ban-jail.local" /etc/fail2ban/jail.d/hostingpanel.local
+cp "${INSTALL_DIR}/etc/fail2ban-hostingpanel-filter.conf" /etc/fail2ban/filter.d/hostingpanel.conf
+# The panel writes failed logins here; fail2ban watches it.
+touch /var/log/hostingpanel/auth.log
+chown hostingpanel:hostingpanel /var/log/hostingpanel/auth.log
 
 # ------------------------------------------------------------------ Cloudflare IP ranges (for CF-only mode)
 log "Fetching Cloudflare IP ranges…"
@@ -339,8 +403,8 @@ log "Fetching Cloudflare IP ranges…"
 # ------------------------------------------------------------------ services
 log "Restarting services…"
 for v in "${PHP_VERSIONS[@]}"; do systemctl restart "php${v}-fpm"; done
-systemctl restart apache2 postfix dovecot rspamd fail2ban
-systemctl enable -q apache2 mariadb postfix dovecot rspamd fail2ban
+systemctl restart apache2 postfix dovecot rspamd fail2ban pdns
+systemctl enable -q apache2 mariadb postfix dovecot rspamd fail2ban pdns
 
 # ------------------------------------------------------------------ done
 SERVER_IP="$(curl -fsS -4 --connect-timeout 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"

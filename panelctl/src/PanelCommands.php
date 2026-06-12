@@ -8,6 +8,62 @@ declare(strict_types=1);
  */
 final class PanelCommands
 {
+    private const ACCESS_FILE = '/etc/hostingpanel/panel-access.conf';
+
+    /**
+     * Restrict who can reach the panel (port 8443) to an IP allowlist, or
+     * open it to everyone. Run with --open over SSH if you ever lock yourself
+     * out:  panelctl panel:access --open
+     *
+     * @param array<string, string> $flags
+     */
+    public static function access(Ctx $ctx, array $flags): int
+    {
+        if (($flags['open'] ?? '') === '1') {
+            $ctx->deletePath(self::ACCESS_FILE);
+            $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
+            $ctx->out('Panel access opened to all IP addresses.');
+            return 0;
+        }
+
+        $raw = $ctx->dryRun ? '[]' : $ctx->stdin();
+        $list = json_decode($raw === '' ? '[]' : $raw, true);
+        if (!is_array($list) || $list === []) {
+            throw new InvalidArgumentException('Provide at least one IP/CIDR (or use --open).');
+        }
+
+        $rules = '';
+        foreach ($list as $entry) {
+            $rules .= '    Require ip ' . self::validCidr((string) $entry) . "\n";
+        }
+        $ctx->writeFile(
+            self::ACCESS_FILE,
+            "# Panel access allowlist — managed by HostingPanel.\n"
+            . "# Escape hatch over SSH:  panelctl panel:access --open\n"
+            . "<RequireAny>\n{$rules}</RequireAny>\n"
+        );
+        $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
+        $ctx->out('Panel access restricted to ' . count($list) . ' address range(s).');
+        return 0;
+    }
+
+    private static function validCidr(string $entry): string
+    {
+        $entry = trim($entry);
+        $ip = $entry;
+        $mask = null;
+        if (str_contains($entry, '/')) {
+            [$ip, $mask] = explode('/', $entry, 2);
+        }
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            throw new InvalidArgumentException("Invalid IP address: {$entry}");
+        }
+        if ($mask !== null && (!ctype_digit($mask) || (int) $mask > 128)) {
+            throw new InvalidArgumentException("Invalid CIDR mask: {$entry}");
+        }
+        return $entry;
+    }
+
     public static function domain(Ctx $ctx, array $flags): int
     {
         $domain = Validate::domain($flags['domain'] ?? '');
@@ -92,6 +148,8 @@ final class PanelCommands
         $ctx->run(['chown', '-R', 'hostingpanel:hostingpanel', "{$web}/storage", "{$web}/bootstrap/cache"], null, true);
 
         $ctx->run(['install', '-m', '755', "{$dst}/scripts/backup.sh", '/usr/local/bin/hostingpanel-backup']);
+        $ctx->run(['install', '-m', '755', "{$dst}/scripts/hp-acme-auth.sh", '/usr/local/bin/hp-acme-auth'], null, true);
+        $ctx->run(['install', '-m', '755', "{$dst}/scripts/hp-acme-cleanup.sh", '/usr/local/bin/hp-acme-cleanup'], null, true);
         // Refresh the daemon unit in case it changed, then reload systemd.
         $ctx->run(['install', '-m', '644', "{$dst}/etc/panelctld.service", '/etc/systemd/system/panelctld.service'], null, true);
         $ctx->run(['systemctl', 'daemon-reload'], null, true);

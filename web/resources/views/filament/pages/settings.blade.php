@@ -6,6 +6,14 @@
         </div>
     </form>
 
+    <form wire:submit="saveAccess">
+        {{ $this->accessForm }}
+        <div class="mt-4 flex gap-2">
+            <x-filament::button type="submit">Restrict access</x-filament::button>
+            <x-filament::button type="button" color="gray" wire:click="openAccess">Open to all</x-filament::button>
+        </div>
+    </form>
+
     <form wire:submit="saveBackup">
         {{ $this->backupForm }}
         <div class="mt-4">

@@ -22,6 +22,8 @@ require __DIR__ . '/SslCommands.php';
 require __DIR__ . '/AccessCommands.php';
 require __DIR__ . '/PanelCommands.php';
 require __DIR__ . '/BackupCommands.php';
+require __DIR__ . '/DnsCommands.php';
+require __DIR__ . '/FtpCommands.php';
 
 const PANELCTL_PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3'];
 
@@ -37,11 +39,19 @@ final class Dispatcher
             'site:ini' => [PhpCommands::class, 'siteIni'],
             'site:cfonly' => [AccessCommands::class, 'siteCfOnly'],
             'site:ipmode' => [AccessCommands::class, 'siteIpMode'],
+            'site:aliases' => [SiteCommands::class, 'aliases'],
             'cf:update' => [AccessCommands::class, 'cfUpdate'],
             'ssl:issue' => [SslCommands::class, 'issue'],
+            'ssl:wildcard' => [SslCommands::class, 'wildcard'],
             'ssl:list' => [SslCommands::class, 'list'],
             'ssl:renew' => [SslCommands::class, 'renew'],
             'ssl:delete' => [SslCommands::class, 'delete'],
+            'dns:sync' => [DnsCommands::class, 'sync'],
+            'dns:zone:delete' => [DnsCommands::class, 'zoneDelete'],
+            'dns:acme' => [DnsCommands::class, 'acme'],
+            'ftp:create' => [FtpCommands::class, 'create'],
+            'ftp:password' => [FtpCommands::class, 'password'],
+            'ftp:delete' => [FtpCommands::class, 'delete'],
             'db:create' => [DbCommands::class, 'create'],
             'db:delete' => [DbCommands::class, 'delete'],
             'mail:domain:add' => [MailCommands::class, 'domainAdd'],
@@ -68,6 +78,7 @@ final class Dispatcher
             'cron:sync' => [CronCommands::class, 'sync'],
             'cron:remove' => [CronCommands::class, 'remove'],
             'panel:domain' => [PanelCommands::class, 'domain'],
+            'panel:access' => [PanelCommands::class, 'access'],
             'panel:self-update' => [PanelCommands::class, 'selfUpdate'],
             'backup:config' => [BackupCommands::class, 'config'],
             'backup:schedule' => [BackupCommands::class, 'schedule'],

@@ -26,6 +26,7 @@ class Settings extends Page implements HasForms
 
     public ?array $backupData = [];
     public ?array $domainData = [];
+    public ?array $accessData = [];
     public string $backupLog = '';
 
     private const SCHEDULES = [
@@ -46,6 +47,9 @@ class Settings extends Page implements HasForms
             'schedule' => Setting::get('backup_schedule', 'disabled'),
         ]);
         $this->domainForm->fill(['domain' => Setting::get('panel_domain')]);
+        $this->accessForm->fill([
+            'ips' => array_values(array_filter(explode(',', Setting::get('panel_access_ips')))),
+        ]);
 
         $result = app(PanelCtl::class)->run('backup:log');
         $this->backupLog = $result->ok() ? trim($result->stdout) : '';
@@ -53,7 +57,55 @@ class Settings extends Page implements HasForms
 
     protected function getForms(): array
     {
-        return ['backupForm', 'domainForm'];
+        return ['backupForm', 'domainForm', 'accessForm'];
+    }
+
+    public function accessForm(Form $form): Form
+    {
+        return $form
+            ->statePath('accessData')
+            ->schema([
+                Forms\Components\Section::make('Restrict panel access')
+                    ->description('Limit who can reach the panel (port 8443) to specific IPs/ranges. '
+                        . 'Locked out? Run "panelctl panel:access --open" over SSH.')
+                    ->schema([
+                        Forms\Components\TagsInput::make('ips')
+                            ->label('Allowed IPs / CIDRs')
+                            ->placeholder('203.0.113.5 or 198.51.100.0/24')
+                            ->helperText('Leave empty and click "Open to all" to remove the restriction.'),
+                    ]),
+            ]);
+    }
+
+    public function saveAccess(): void
+    {
+        $ips = collect($this->accessForm->getState()['ips'] ?? [])
+            ->map(fn ($v) => trim($v))->filter()->unique()->values();
+
+        if ($ips->isEmpty()) {
+            Notification::make()->title('Add at least one IP, or use "Open to all".')->warning()->send();
+            return;
+        }
+
+        $result = app(PanelCtl::class)->run('panel:access', [], $ips->toJson());
+        if ($result->ok()) {
+            Setting::put('panel_access_ips', $ips->implode(','));
+            AuditLog::record('panel.access', $ips->implode(' '));
+        }
+        Notification::make()->title($result->ok() ? 'Panel access restricted' : 'Failed')
+            ->body($result->output())->{$result->ok() ? 'success' : 'danger'}()->persistent()->send();
+    }
+
+    public function openAccess(): void
+    {
+        $result = app(PanelCtl::class)->run('panel:access', ['open' => '1']);
+        if ($result->ok()) {
+            Setting::put('panel_access_ips', '');
+            $this->accessForm->fill(['ips' => []]);
+            AuditLog::record('panel.access', 'open');
+        }
+        Notification::make()->title($result->output())
+            ->{$result->ok() ? 'success' : 'danger'}()->send();
     }
 
     public function domainForm(Form $form): Form

@@ -14,10 +14,11 @@ final class SiteCommands
         $docRoot = "{$home}/htdocs";
         $socket = "/run/php/{$domain}.sock";
 
-        // System user (no shell, home = site dir). Retry on transient
-        // /etc/passwd lock contention from background apt jobs.
+        // System user (no shell). Home is the site dir but it is NOT created
+        // by useradd — the dir itself stays root-owned so it can serve as an
+        // SFTP chroot. Retry on transient /etc/passwd lock contention.
         $ctx->run([
-            'useradd', '--create-home', '--home-dir', $home,
+            'useradd', '--no-create-home', '--home-dir', $home,
             '--shell', '/usr/sbin/nologin', '--user-group', $user,
         ], null, false, null, true);
 
@@ -32,16 +33,8 @@ final class SiteCommands
         // PHP-FPM pool
         self::writePool($ctx, $domain, $php, []);
 
-        // Apache vhost
-        $ctx->writeFile(
-            "/etc/apache2/sites-available/{$domain}.conf",
-            $ctx->template('vhost.conf.tpl', [
-                'domain' => $domain,
-                'doc_root' => $docRoot,
-                'socket' => $socket,
-                'home' => $home,
-            ])
-        );
+        // Apache vhost (www is the default alias)
+        self::writeVhost($ctx, $domain, $docRoot, $socket, $home, ["www.{$domain}"]);
 
         // Placeholder page
         $ctx->writeFile(
@@ -54,12 +47,83 @@ final class SiteCommands
             . "<p>Site created with HostingPanel — upload your files to htdocs/.</p></div></body></html>\n"
         );
 
-        $ctx->run(['chown', '-R', "{$user}:{$user}", $home]);
+        // Chroot-safe ownership: the site dir is root-owned (required for
+        // SFTP ChrootDirectory); the writable subdirs belong to the site user.
+        // htdocs is setgid + group-writable so SFTP accounts in the site group
+        // can upload and new files inherit the group.
+        $ctx->run(['chown', 'root:root', $home]);
+        $ctx->run(['chmod', '0755', $home]);
+        $ctx->run(['chown', '-R', "{$user}:{$user}", $docRoot, "{$home}/logs", "{$home}/tmp"]);
+        $ctx->run(['chmod', '2775', $docRoot]);
+
         $ctx->run(['a2ensite', '--quiet', "{$domain}.conf"]);
         $ctx->run(['systemctl', 'restart', "php{$php}-fpm"]);
         $ctx->run(['systemctl', 'reload', 'apache2']);
 
         $ctx->out("Site {$domain} created: docroot {$docRoot}, PHP {$php} pool as user {$user}.");
+        return 0;
+    }
+
+    /**
+     * (Re)write a site's Apache vhost with the given alias domains.
+     *
+     * @param list<string> $aliases extra ServerAlias hostnames
+     */
+    public static function writeVhost(
+        Ctx $ctx,
+        string $domain,
+        string $docRoot,
+        string $socket,
+        string $home,
+        array $aliases
+    ): void {
+        $aliasLines = '';
+        foreach ($aliases as $alias) {
+            $aliasLines .= "    ServerAlias " . Validate::domain($alias) . "\n";
+        }
+
+        $ctx->writeFile(
+            "/etc/apache2/sites-available/{$domain}.conf",
+            $ctx->template('vhost.conf.tpl', [
+                'domain' => $domain,
+                'doc_root' => $docRoot,
+                'socket' => $socket,
+                'home' => $home,
+                'server_aliases' => rtrim($aliasLines, "\n"),
+            ])
+        );
+    }
+
+    /**
+     * Replace a site's alias domains (JSON list of hostnames on stdin) and
+     * reload Apache. www.<domain> is always kept.
+     *
+     * @param array<string, string> $flags
+     */
+    public static function aliases(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        $home = "/var/www/{$domain}";
+        $docRoot = "{$home}/htdocs";
+        $socket = "/run/php/{$domain}.sock";
+
+        $raw = $ctx->dryRun ? '[]' : $ctx->stdin();
+        $list = json_decode($raw === '' ? '[]' : $raw, true);
+        if (!is_array($list)) {
+            throw new InvalidArgumentException('Expected a JSON array of alias domains on stdin.');
+        }
+
+        $aliases = ["www.{$domain}"];
+        foreach ($list as $alias) {
+            $alias = Validate::domain((string) $alias);
+            if ($alias !== $domain && !in_array($alias, $aliases, true)) {
+                $aliases[] = $alias;
+            }
+        }
+
+        self::writeVhost($ctx, $domain, $docRoot, $socket, $home, $aliases);
+        $ctx->run(['systemctl', 'reload', 'apache2']);
+        $ctx->out(count($aliases) . " alias domain(s) set for {$domain}: " . implode(', ', $aliases));
         return 0;
     }
 

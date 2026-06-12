@@ -25,6 +25,57 @@ final class SslCommands
         return 0;
     }
 
+    /**
+     * Issue a wildcard certificate (domain + *.domain) over DNS-01, using
+     * our own PowerDNS zone via certbot manual hooks, then deploy it to a
+     * dedicated SSL vhost. Requires the zone to be hosted on this server.
+     *
+     * @param array<string, string> $flags
+     */
+    public static function wildcard(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        $home = "/var/www/{$domain}";
+        $docRoot = "{$home}/htdocs";
+        $socket = "/run/php/{$domain}.sock";
+
+        $argv = [
+            'certbot', 'certonly', '--non-interactive', '--agree-tos',
+            '--manual', '--preferred-challenges', 'dns-01',
+            '--manual-auth-hook', '/usr/local/bin/hp-acme-auth',
+            '--manual-cleanup-hook', '/usr/local/bin/hp-acme-cleanup',
+            '--cert-name', $domain,
+            '-d', $domain, '-d', "*.{$domain}",
+        ];
+        self::emailArgs($argv);
+        $ctx->run($argv);
+
+        // Deploy: SSL vhost referencing the wildcard cert + an HTTP→HTTPS
+        // redirect include that the site's :80 vhost picks up.
+        $ctx->writeFile(
+            "/etc/apache2/sites-available/{$domain}-le-ssl.conf",
+            $ctx->template('vhost-ssl.conf.tpl', [
+                'domain' => $domain,
+                'doc_root' => $docRoot,
+                'socket' => $socket,
+                'home' => $home,
+                'cert' => "/etc/letsencrypt/live/{$domain}/fullchain.pem",
+                'key' => "/etc/letsencrypt/live/{$domain}/privkey.pem",
+            ])
+        );
+        $ctx->writeFile(
+            "/etc/hostingpanel/site-access/{$domain}.https.conf",
+            "RewriteEngine On\nRewriteCond %{HTTPS} off\n"
+            . "RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]\n"
+        );
+        $ctx->run(['a2enmod', '--quiet', 'ssl', 'rewrite'], null, true);
+        $ctx->run(['a2ensite', '--quiet', "{$domain}-le-ssl.conf"]);
+        $ctx->run(['systemctl', 'reload', 'apache2']);
+
+        $ctx->out("Wildcard certificate issued and deployed for {$domain} and *.{$domain}.");
+        return 0;
+    }
+
     /** All certificates as JSON: name, domains, expiry, valid days. */
     public static function list(Ctx $ctx, array $flags): int
     {

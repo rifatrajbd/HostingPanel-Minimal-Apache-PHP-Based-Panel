@@ -24,6 +24,7 @@ class ManageSite extends Page implements HasForms
     public Site $record;
     public ?array $phpData = [];
     public ?array $cronData = [];
+    public ?array $aliasData = [];
 
     public function mount(Site $record): void
     {
@@ -42,6 +43,7 @@ class ManageSite extends Page implements HasForms
                 'schedule' => $j->schedule, 'command' => $j->command,
             ])->all(),
         ]);
+        $this->aliasForm->fill(['aliases' => $record->aliases ?? []]);
     }
 
     public function getTitle(): string
@@ -57,7 +59,44 @@ class ManageSite extends Page implements HasForms
 
     protected function getForms(): array
     {
-        return ['phpForm', 'cronForm'];
+        return ['phpForm', 'cronForm', 'aliasForm'];
+    }
+
+    public function aliasForm(Form $form): Form
+    {
+        return $form
+            ->statePath('aliasData')
+            ->schema([
+                Forms\Components\Section::make('Domains & aliases')
+                    ->description('Additional domains served from this same site (Apache ServerAlias). www is always included.')
+                    ->schema([
+                        Forms\Components\TagsInput::make('aliases')
+                            ->placeholder('shop.example.com')
+                            ->helperText('Press Enter after each domain. Point its DNS here too.'),
+                    ]),
+            ]);
+    }
+
+    public function saveAliases(): void
+    {
+        $aliases = collect($this->aliasForm->getState()['aliases'] ?? [])
+            ->map(fn ($d) => strtolower(trim($d)))
+            ->filter(fn ($d) => preg_match('/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $d))
+            ->unique()->values();
+
+        $result = app(PanelCtl::class)->run(
+            'site:aliases',
+            ['domain' => $this->record->domain],
+            $aliases->toJson(),
+        );
+
+        if ($result->ok()) {
+            $this->record->update(['aliases' => $aliases->all()]);
+            AuditLog::record('site.aliases', $this->record->domain);
+            Notification::make()->title($result->output())->success()->send();
+        } else {
+            Notification::make()->title('Failed')->body($result->output())->danger()->persistent()->send();
+        }
     }
 
     public function phpForm(Form $form): Form
@@ -236,6 +275,25 @@ class ManageSite extends Page implements HasForms
                         Notification::make()->title($result->output())->success()->send();
                     } else {
                         Notification::make()->title('Failed')->body($result->output())->danger()->persistent()->send();
+                    }
+                }),
+
+            Actions\Action::make('wildcardSsl')
+                ->label('Wildcard SSL')
+                ->icon('heroicon-o-lock-closed')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalDescription('Issues a *.' . $this->record->domain . ' certificate via DNS-01. '
+                    . 'Requires this domain\'s DNS zone to be hosted here (DNS Zones page).')
+                ->action(function () {
+                    $result = app(PanelCtl::class)->run('ssl:wildcard', ['domain' => $this->record->domain]);
+                    if ($result->ok()) {
+                        $this->record->update(['ssl_enabled' => true]);
+                        AuditLog::record('ssl.wildcard', $this->record->domain);
+                        Notification::make()->title($result->output())->success()->send();
+                    } else {
+                        Notification::make()->title('Wildcard SSL failed')->body($result->output())
+                            ->danger()->persistent()->send();
                     }
                 }),
 

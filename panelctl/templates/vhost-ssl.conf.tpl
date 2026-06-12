@@ -1,7 +1,14 @@
-<VirtualHost *:80>
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
     ServerName {{domain}}
-{{server_aliases}}
+    ServerAlias *.{{domain}}
     DocumentRoot {{doc_root}}
+
+    SSLEngine on
+    SSLCertificateFile {{cert}}
+    SSLCertificateKeyFile {{key}}
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
     <Directory {{doc_root}}>
         Options -Indexes +FollowSymLinks
@@ -13,18 +20,14 @@
         SetHandler "proxy:unix:{{socket}}|fcgi://localhost"
     </FilesMatch>
 
-    # Block access to dotfiles and common sensitive files
     <FilesMatch "^\.|composer\.(json|lock)$">
         Require all denied
     </FilesMatch>
 
-    # Per-site access rules (Cloudflare-only and IPv4/IPv6 mode).
-    # Copied into the certbot SSL vhost too, so both HTTP and HTTPS honour them.
     IncludeOptional /etc/hostingpanel/site-access/{{domain}}.conf
     IncludeOptional /etc/hostingpanel/site-access/{{domain}}.ipmode.conf
-    # HTTP→HTTPS redirect when a wildcard cert is deployed.
-    IncludeOptional /etc/hostingpanel/site-access/{{domain}}.https.conf
 
     ErrorLog {{home}}/logs/error.log
     CustomLog {{home}}/logs/access.log combined
 </VirtualHost>
+</IfModule>

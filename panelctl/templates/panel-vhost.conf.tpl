@@ -14,6 +14,9 @@ Listen 8443
         AllowOverride None
         Require all granted
 
+        # Optional IP allowlist (panelctl panel:access). Removed = open to all.
+        IncludeOptional /etc/hostingpanel/panel-access.conf
+
         RewriteEngine On
         RewriteRule ^(.*)/$ /$1 [L,R=301]
         RewriteCond %{REQUEST_FILENAME} !-d
