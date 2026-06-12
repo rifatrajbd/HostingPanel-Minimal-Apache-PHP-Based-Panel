@@ -32,10 +32,15 @@ final class FtpCommands
 
         // Primary group = the site group (write access to setgid htdocs);
         // supplementary group sftponly = sshd chroots the account.
-        $ctx->run([
-            'useradd', '--no-create-home', '--home-dir', $home,
-            '--shell', '/usr/sbin/nologin', '--gid', $siteGroup, '--groups', 'sftponly', $user,
-        ], null, false, null, true);
+        // Idempotent: reuse an orphaned account from a failed attempt.
+        if ($ctx->dryRun || !SiteCommands::userExists($user)) {
+            $ctx->run([
+                'useradd', '--no-create-home', '--home-dir', $home,
+                '--shell', '/usr/sbin/nologin', '--gid', $siteGroup, '--groups', 'sftponly', $user,
+            ], null, false, null, true);
+        } else {
+            $ctx->run(['usermod', '--home', $home, '--gid', $siteGroup, '--groups', 'sftponly', $user], null, true);
+        }
         $ctx->run(['chpasswd'], "{$user}:{$password}\n");
 
         $ctx->out("SFTP account {$user} created — connects over SSH (port 22), chrooted to {$home}, lands in htdocs/.");

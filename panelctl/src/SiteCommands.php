@@ -17,10 +17,18 @@ final class SiteCommands
         // System user (no shell). Home is the site dir but it is NOT created
         // by useradd — the dir itself stays root-owned so it can serve as an
         // SFTP chroot. Retry on transient /etc/passwd lock contention.
-        $ctx->run([
-            'useradd', '--no-create-home', '--home-dir', $home,
-            '--shell', '/usr/sbin/nologin', '--user-group', $user,
-        ], null, false, null, true);
+        //
+        // Idempotent: the panel only calls site:create when it has no record
+        // of this domain, so a pre-existing user is an orphan from a failed
+        // attempt — reuse it instead of failing, so retries always succeed.
+        if ($ctx->dryRun || !self::userExists($user)) {
+            $ctx->run([
+                'useradd', '--no-create-home', '--home-dir', $home,
+                '--shell', '/usr/sbin/nologin', '--user-group', $user,
+            ], null, false, null, true);
+        } else {
+            $ctx->out("System user {$user} already existed (orphan from a failed attempt) — reusing it.");
+        }
 
         if (!$ctx->dryRun) {
             foreach (["{$docRoot}", "{$home}/logs", "{$home}/tmp"] as $dir) {
@@ -62,6 +70,11 @@ final class SiteCommands
 
         $ctx->out("Site {$domain} created: docroot {$docRoot}, PHP {$php} pool as user {$user}.");
         return 0;
+    }
+
+    public static function userExists(string $user): bool
+    {
+        return function_exists('posix_getpwnam') && posix_getpwnam($user) !== false;
     }
 
     /**
