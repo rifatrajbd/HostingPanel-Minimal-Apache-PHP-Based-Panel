@@ -53,6 +53,7 @@ class PanelSmokeTest extends TestCase
             '/sites/create',
             "/sites/{$site->id}/manage",
             '/file-manager',
+            "/file-edit?site={$site->id}&path=/htdocs/index.php",
             '/site-databases',
             '/site-databases/create',
             "/site-databases/{$db->id}/manage",

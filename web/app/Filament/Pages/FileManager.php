@@ -165,7 +165,7 @@ class FileManager extends Page
 
     public function editUrl(string $name): string
     {
-        return route('files.edit', ['site' => $this->site, 'path' => $this->join($this->path, $name)]);
+        return EditFile::getUrl(['site' => $this->site, 'path' => $this->join($this->path, $name)]);
     }
 
     /** The single selected file name, or null (used to enable Download/Edit). */
