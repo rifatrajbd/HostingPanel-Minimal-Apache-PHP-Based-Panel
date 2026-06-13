@@ -33,11 +33,17 @@ class EditFile extends Page
             return;
         }
         $result = app(PanelCtl::class)->run('fs:read', ['domain' => $site->domain, 'path' => $this->path]);
-        if ($result->ok()) {
-            $this->content = $result->stdout;
-        } else {
+        if (!$result->ok()) {
             $this->error = $result->output();
+            return;
         }
+        $staged = trim($result->stdout);
+        if ($staged === '' || !is_file($staged)) {
+            $this->error = 'Could not read the file.';
+            return;
+        }
+        $this->content = (string) file_get_contents($staged);
+        @unlink($staged);
     }
 
     public function save(): void

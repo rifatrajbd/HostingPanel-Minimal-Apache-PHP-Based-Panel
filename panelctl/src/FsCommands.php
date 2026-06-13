@@ -112,27 +112,44 @@ final class FsCommands
         return ($u['name'] ?? '?') . '/' . ($g['name'] ?? '?');
     }
 
-    /** @param array<string, string> $flags */
+    /**
+     * Stage a file into a panel-readable location and print its path. The
+     * content can't be returned inline because the daemon captures the
+     * command's text buffer (not raw stdout) and JSON-encodes the response —
+     * which would corrupt binary files. The panel reads/streams the staged
+     * copy and deletes it.
+     *
+     * @param array<string, string> $flags
+     */
     public static function read(Ctx $ctx, array $flags): int
     {
         [$base] = self::base($flags);
-        $file = self::resolve($base, $flags['path'] ?? '', true);
         if ($ctx->dryRun) {
-            $ctx->out('[dry-run] read ' . $file);
+            $ctx->out('[dry-run] read');
             return 0;
         }
+        $file = self::resolve($base, $flags['path'] ?? '', true);
         if (!is_file($file)) {
             throw new InvalidArgumentException('Not a file.');
         }
         if (filesize($file) > self::MAX_READ) {
             throw new RuntimeException('File larger than 50 MB — use SFTP for this one.');
         }
-        $fh = fopen($file, 'rb');
-        if ($fh === false) {
-            throw new RuntimeException('Cannot open file.');
+
+        $dir = '/var/lib/hostingpanel/exports';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0750, true);
         }
-        fpassthru($fh);
-        fclose($fh);
+        $staged = $dir . '/read-' . bin2hex(random_bytes(8));
+        if (!copy($file, $staged)) {
+            throw new RuntimeException('Cannot stage file for reading.');
+        }
+        // Make it readable by the unprivileged panel user, which reads + deletes it.
+        @chown($staged, 'hostingpanel');
+        @chgrp($staged, 'hostingpanel');
+        @chmod($staged, 0640);
+
+        $ctx->out($staged);
         return 0;
     }
 
