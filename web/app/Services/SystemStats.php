@@ -38,8 +38,33 @@ class SystemStats
     {
         return [
             'ipv4' => $this->primaryAddress('udp://1.1.1.1:53'),
-            'ipv6' => $this->primaryAddress('udp://[2606:4700:4700::1111]:53'),
+            // Prefer the address actually configured on an interface — the
+            // route trick returns null when there's an IPv6 address but no
+            // usable default IPv6 route.
+            'ipv6' => $this->interfaceIpv6() ?? $this->primaryAddress('udp://[2606:4700:4700::1111]:53'),
         ];
+    }
+
+    /** First global-scope IPv6 from the kernel (no routing required). */
+    private function interfaceIpv6(): ?string
+    {
+        if (!is_readable('/proc/net/if_inet6')) {
+            return null;
+        }
+        foreach (file('/proc/net/if_inet6', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $f = preg_split('/\s+/', trim($line));
+            // columns: hexaddr ifindex prefixlen scope flags ifname
+            if (count($f) < 6 || $f[3] !== '00' || $f[5] === 'lo') {
+                continue; // scope 00 = global; skip loopback
+            }
+            $addr = @inet_ntop(@hex2bin($f[0]) ?: '');
+            if ($addr === false || str_starts_with($addr, 'fe80') || str_starts_with($addr, 'fc')
+                || str_starts_with($addr, 'fd') || $addr === '::1') {
+                continue; // skip link-local / unique-local
+            }
+            return $addr;
+        }
+        return null;
     }
 
     private function primaryAddress(string $target): ?string
