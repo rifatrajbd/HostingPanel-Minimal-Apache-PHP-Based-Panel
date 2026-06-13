@@ -123,6 +123,12 @@ class FileManager extends Page
         $this->selected = [];
     }
 
+    /** Used by the right-click menu: operate on just this item. */
+    public function selectOnly(string $name): void
+    {
+        $this->selected = [$name];
+    }
+
     // --- search ------------------------------------------------------------
 
     public function doSearch(): void
