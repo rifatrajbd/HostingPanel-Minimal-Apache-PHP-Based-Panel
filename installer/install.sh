@@ -193,15 +193,8 @@ if [[ ! -d ${INSTALL_DIR}/phpmyadmin ]]; then
         mkdir -p "${INSTALL_DIR}/phpmyadmin"
         tar xzf "${PMA_TAR}" -C "${INSTALL_DIR}/phpmyadmin" --strip-components=1
         rm -f /tmp/pma.tar.gz
-        cat > "${INSTALL_DIR}/phpmyadmin/config.inc.php" <<EOF
-<?php
-\$cfg['blowfish_secret'] = '$(openssl rand -base64 32)';
-\$cfg['TempDir'] = '/var/lib/hostingpanel/pma-tmp';
-\$i = 1;
-\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
-\$cfg['Servers'][\$i]['host'] = '127.0.0.1';
-\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
-EOF
+        # Single sign-on config + the 'pma' MySQL user are set up by panelctl
+        # pma:setup near the end of the installer (MariaDB must be up first).
     else
         log "WARNING: phpMyAdmin download failed — install later by re-running this script."
     fi
@@ -403,6 +396,9 @@ chown hostingpanel:hostingpanel /var/log/hostingpanel/auth.log
 # ------------------------------------------------------------------ Cloudflare IP ranges (for CF-only mode)
 log "Fetching Cloudflare IP ranges…"
 /usr/local/bin/panelctl cf:update || log "WARNING: cf:update failed — run 'panelctl cf:update' later."
+
+log "Configuring phpMyAdmin single sign-on…"
+/usr/local/bin/panelctl pma:setup || log "WARNING: pma:setup failed — run 'panelctl pma:setup' later."
 
 # ------------------------------------------------------------------ services
 # A single failed restart must NOT abort the script (set -e) before we print

@@ -69,7 +69,7 @@ class ManageDatabase extends Page
             Action::make('back')->label('Manage Databases')->icon('heroicon-o-circle-stack')
                 ->color('gray')->url(SiteDatabaseResource::getUrl('index')),
             Action::make('phpmyadmin')->label('phpMyAdmin')->icon('heroicon-o-arrow-top-right-on-square')
-                ->color('gray')->url('/phpmyadmin/', shouldOpenInNewTab: true),
+                ->color('gray')->url('/phpmyadmin-sso', shouldOpenInNewTab: true),
         ];
     }
 

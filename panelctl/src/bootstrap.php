@@ -24,6 +24,7 @@ require __DIR__ . '/PanelCommands.php';
 require __DIR__ . '/BackupCommands.php';
 require __DIR__ . '/DnsCommands.php';
 require __DIR__ . '/FtpCommands.php';
+require __DIR__ . '/PmaCommands.php';
 
 const PANELCTL_PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3'];
 
@@ -95,6 +96,7 @@ final class Dispatcher
             'cron:remove' => [CronCommands::class, 'remove'],
             'panel:domain' => [PanelCommands::class, 'domain'],
             'panel:access' => [PanelCommands::class, 'access'],
+            'pma:setup' => [PmaCommands::class, 'setup'],
             'panel:self-update' => [PanelCommands::class, 'selfUpdate'],
             'backup:config' => [BackupCommands::class, 'config'],
             'backup:schedule' => [BackupCommands::class, 'schedule'],

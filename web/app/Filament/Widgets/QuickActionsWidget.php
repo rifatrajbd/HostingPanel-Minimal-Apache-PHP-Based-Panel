@@ -27,7 +27,7 @@ class QuickActionsWidget extends Widget
             ['New SFTP account', 'heroicon-o-arrow-up-on-square-stack', FtpAccountResource::getUrl('create'), 'amber'],
             ['File manager', 'heroicon-o-folder', FileManager::getUrl(), 'yellow'],
             ['SSL manager', 'heroicon-o-lock-closed', SslManager::getUrl(), 'teal'],
-            ['phpMyAdmin', 'heroicon-o-table-cells', '/phpmyadmin/', 'blue'],
+            ['phpMyAdmin', 'heroicon-o-table-cells', '/phpmyadmin-sso', 'blue'],
             ['Webmail', 'heroicon-o-at-symbol', '/webmail/', 'fuchsia'],
         ];
     }

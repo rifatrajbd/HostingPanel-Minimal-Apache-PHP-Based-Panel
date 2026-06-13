@@ -80,7 +80,7 @@ class SiteDatabaseResource extends Resource
                     ->label('phpMyAdmin')
                     ->icon('heroicon-o-arrow-top-right-on-square')
                     ->color('gray')
-                    ->url('/phpmyadmin/', shouldOpenInNewTab: true),
+                    ->url('/phpmyadmin-sso', shouldOpenInNewTab: true),
             ])
             ->emptyStateHeading('No databases yet');
     }

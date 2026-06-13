@@ -145,6 +145,8 @@ final class PanelCommands
             "cd {$web} && sudo -u hostingpanel php artisan migrate --force --no-interaction"]);
         $ctx->run(['bash', '-c',
             "cd {$web} && php artisan filament:assets && php artisan optimize"]);
+        // Keep phpMyAdmin SSO config in sync (idempotent; reuses the password).
+        PmaCommands::setup($ctx, []);
         $ctx->run(['chown', '-R', 'hostingpanel:hostingpanel', "{$web}/storage", "{$web}/bootstrap/cache"], null, true);
 
         $ctx->run(['install', '-m', '755', "{$dst}/scripts/backup.sh", '/usr/local/bin/hostingpanel-backup']);

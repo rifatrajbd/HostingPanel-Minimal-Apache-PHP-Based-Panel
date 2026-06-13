@@ -18,4 +18,11 @@ return [
 
     // Failed panel logins are appended here for the fail2ban jail to watch.
     'auth_log' => env('PANEL_AUTH_LOG', '/var/log/hostingpanel/auth.log'),
+
+    // phpMyAdmin SSO: the 'pma' MySQL user's password (written by panelctl
+    // pma:setup). Read from the file so existing installs pick it up too.
+    'pma_password' => env('PMA_DB_PASSWORD')
+        ?: (@is_readable('/etc/hostingpanel/pma-password')
+            ? trim((string) @file_get_contents('/etc/hostingpanel/pma-password'))
+            : null),
 ];
