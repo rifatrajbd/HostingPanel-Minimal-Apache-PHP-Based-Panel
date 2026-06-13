@@ -38,6 +38,7 @@ final class Dispatcher
             'site:php' => [PhpCommands::class, 'sitePhp'],
             'site:ini' => [PhpCommands::class, 'siteIni'],
             'site:cfonly' => [AccessCommands::class, 'siteCfOnly'],
+            'site:hotlink' => [AccessCommands::class, 'siteHotlink'],
             'site:ipmode' => [AccessCommands::class, 'siteIpMode'],
             'site:aliases' => [SiteCommands::class, 'aliases'],
             'cf:update' => [AccessCommands::class, 'cfUpdate'],
@@ -50,6 +51,7 @@ final class Dispatcher
             'dns:check' => [DnsCommands::class, 'check'],
             'dns:zone:delete' => [DnsCommands::class, 'zoneDelete'],
             'dns:acme' => [DnsCommands::class, 'acme'],
+            'mail:dns' => [MailCommands::class, 'dns'],
             'mail:dnscheck' => [MailCommands::class, 'dnsCheck'],
             'ftp:create' => [FtpCommands::class, 'create'],
             'ftp:password' => [FtpCommands::class, 'password'],
@@ -99,6 +101,8 @@ final class Dispatcher
             'backup:test' => [BackupCommands::class, 'test'],
             'backup:run' => [BackupCommands::class, 'run'],
             'backup:log' => [BackupCommands::class, 'log'],
+            'backup:download' => [BackupCommands::class, 'download'],
+            'backup:restore' => [BackupCommands::class, 'restore'],
         ];
     }
 

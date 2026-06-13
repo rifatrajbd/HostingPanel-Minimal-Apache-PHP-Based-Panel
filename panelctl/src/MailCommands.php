@@ -54,6 +54,51 @@ final class MailCommands
         return 0;
     }
 
+    /** Clean, structured DNS records for a mail domain as JSON (host/type/value). */
+    public static function dns(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        if ($ctx->dryRun) {
+            $ctx->out('[]');
+            return 0;
+        }
+        $ip4 = Net::ipv4();
+        $ip6 = Net::ipv6();
+        $records = [];
+        if ($ip4 !== null) {
+            $records[] = ['host' => "mail.{$domain}", 'type' => 'A', 'value' => $ip4];
+        }
+        if ($ip6 !== null) {
+            $records[] = ['host' => "mail.{$domain}", 'type' => 'AAAA', 'value' => $ip6];
+        }
+        $records[] = ['host' => $domain, 'type' => 'MX', 'value' => "10 mail.{$domain}"];
+        $records[] = ['host' => $domain, 'type' => 'TXT', 'value' => 'v=spf1 mx -all'];
+
+        $dkim = self::dkimRecord($ctx, $domain);
+        if ($dkim !== null) {
+            $records[] = ['host' => "mail._domainkey.{$domain}", 'type' => 'TXT', 'value' => $dkim];
+        }
+        $records[] = ['host' => "_dmarc.{$domain}", 'type' => 'TXT',
+            'value' => "v=DMARC1; p=quarantine; rua=mailto:postmaster@{$domain}"];
+
+        $ctx->out((string) json_encode($records));
+        return 0;
+    }
+
+    /** Build the DKIM TXT value from the stored private key (no rspamadm reparse). */
+    private static function dkimRecord(Ctx $ctx, string $domain): ?string
+    {
+        $keyFile = self::DKIM_DIR . "/{$domain}.mail.key";
+        if (!is_file($keyFile)) {
+            return null;
+        }
+        // DER public key → base64 is exactly the DKIM "p=" value.
+        $pub = $ctx->run(['bash', '-c',
+            'openssl rsa -in ' . escapeshellarg($keyFile) . ' -pubout -outform DER 2>/dev/null | base64 -w0'], null, true);
+        $pub = trim($pub);
+        return $pub === '' ? null : "v=DKIM1; k=rsa; p={$pub}";
+    }
+
     /** Check whether the domain's mail DNS (MX/A/SPF/DKIM/DMARC/PTR) is set. */
     public static function dnsCheck(Ctx $ctx, array $flags): int
     {

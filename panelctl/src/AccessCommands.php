@@ -91,6 +91,51 @@ final class AccessCommands
         return 0;
     }
 
+    /**
+     * Hotlink protection: block other sites from embedding this site's images/
+     * media by checking the Referer. Allowed domains (the site + aliases, plus
+     * major search engines) come as a JSON list on stdin.
+     */
+    public static function siteHotlink(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        $enable = ($flags['enable'] ?? '') === '1';
+        $file = self::ACCESS_DIR . "/{$domain}.hotlink.conf";
+
+        if (!$enable) {
+            $ctx->deletePath($file);
+            $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
+            $ctx->out("Hotlink protection disabled for {$domain}.");
+            return 0;
+        }
+
+        $raw = $ctx->dryRun ? '[]' : $ctx->stdin();
+        $list = json_decode($raw === '' ? '[]' : $raw, true);
+        $allowed = [$domain];
+        foreach (is_array($list) ? $list : [] as $d) {
+            $d = Validate::domain((string) $d);
+            if (!in_array($d, $allowed, true)) {
+                $allowed[] = $d;
+            }
+        }
+
+        $conf = "# Hotlink protection (managed by HostingPanel)\n"
+            . "RewriteEngine On\n"
+            . "RewriteCond %{HTTP_REFERER} !^$\n";
+        foreach ($allowed as $d) {
+            $conf .= 'RewriteCond %{HTTP_REFERER} !^https?://([a-z0-9-]+\.)*'
+                . preg_quote($d, '/') . " [NC]\n";
+        }
+        // Don't block major search engines / image proxies.
+        $conf .= "RewriteCond %{HTTP_REFERER} !^https?://([a-z0-9-]+\\.)*(google|bing|yahoo|duckduckgo|yandex)\\. [NC]\n";
+        $conf .= "RewriteRule \\.(jpe?g|png|gif|webp|svg|bmp|ico|mp4|webm|mp3)$ - [F,NC,L]\n";
+
+        $ctx->writeFile($file, $conf);
+        $ctx->run(['systemctl', 'reload', 'apache2'], null, true);
+        $ctx->out("Hotlink protection ENABLED for {$domain} (allowed: " . implode(', ', $allowed) . ').');
+        return 0;
+    }
+
     /** Toggle Cloudflare-only access for one site. */
     public static function siteCfOnly(Ctx $ctx, array $flags): int
     {

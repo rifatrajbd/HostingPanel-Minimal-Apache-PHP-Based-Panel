@@ -14,6 +14,74 @@ final class BackupCommands
     private const CRON_FILE = '/etc/cron.d/hostingpanel-backup';
     private const SCRIPT = '/usr/local/bin/hostingpanel-backup';
     private const LOG = '/var/log/hostingpanel/backup.log';
+    private const EXPORTS = '/var/lib/hostingpanel/exports';
+
+    /**
+     * Build a downloadable backup archive and print its path.
+     *   type=full  — every database dump + every site + panel data (one .tar.gz)
+     *   type=site  — a single site's files (--domain)
+     * @param array<string, string> $flags
+     */
+    public static function download(Ctx $ctx, array $flags): int
+    {
+        $type = ($flags['type'] ?? 'full') === 'site' ? 'site' : 'full';
+        $stamp = date('Ymd-His');
+        $domain = $type === 'site' ? Validate::domain($flags['domain'] ?? '') : '';
+        $file = $type === 'site'
+            ? self::EXPORTS . "/site-{$domain}-{$stamp}.tar.gz"
+            : self::EXPORTS . "/hostingpanel-full-{$stamp}.tar.gz";
+
+        if ($ctx->dryRun) {
+            $ctx->out($file);
+            return 0;
+        }
+        if (!is_dir(self::EXPORTS)) {
+            mkdir(self::EXPORTS, 0750, true);
+        }
+        $ctx->run(['chown', 'hostingpanel:hostingpanel', self::EXPORTS], null, true);
+        $ef = escapeshellarg($file);
+
+        if ($type === 'site') {
+            $ctx->run(['bash', '-c', 'tar czf ' . $ef . ' -C /var/www ' . escapeshellarg($domain)]);
+        } else {
+            $script = 'set -e; W=$(mktemp -d); '
+                . 'for db in $(mysql -N -e "SHOW DATABASES" | grep -Ev "^(information_schema|performance_schema|mysql|sys)$"); do '
+                . 'mysqldump --single-transaction --quick --routines "$db" | gzip > "$W/db-$db.sql.gz"; done; '
+                . 'for d in /var/www/*/; do s=$(basename "$d"); [ "$s" = "html" ] && continue; [ "$s" = "panel-acme" ] && continue; '
+                . 'tar czf "$W/site-$s.tar.gz" -C /var/www "$s"; done; '
+                . 'cp /var/lib/hostingpanel/panel.sqlite "$W/" 2>/dev/null || true; '
+                . 'tar czf ' . $ef . ' -C "$W" .; rm -rf "$W"';
+            $ctx->run(['bash', '-c', $script]);
+        }
+        $ctx->run(['chown', 'hostingpanel:hostingpanel', $file], null, true);
+        $ctx->run(['chmod', '640', $file], null, true);
+        $ctx->out($file);
+        return 0;
+    }
+
+    /** Restore databases + site files from a staged full-backup upload. */
+    public static function restore(Ctx $ctx, array $flags): int
+    {
+        $src = $flags['src'] ?? '';
+        if ($ctx->dryRun) {
+            $ctx->out('[dry-run] restore from upload');
+            return 0;
+        }
+        $real = realpath($src);
+        if ($real === false || !str_starts_with($real, '/var/lib/hostingpanel/uploads/')) {
+            throw new InvalidArgumentException('Restore source must be a staged upload.');
+        }
+        $er = escapeshellarg($real);
+        $script = 'set -e; W=$(mktemp -d); tar xzf ' . $er . ' -C "$W"; '
+            . 'for f in "$W"/db-*.sql.gz; do [ -e "$f" ] || continue; n=$(basename "$f"); db=${n#db-}; db=${db%.sql.gz}; '
+            . 'mysql -e "CREATE DATABASE IF NOT EXISTS $db"; gunzip -c "$f" | mysql "$db"; done; '
+            . 'for f in "$W"/site-*.tar.gz; do [ -e "$f" ] || continue; tar xzpf "$f" -C /var/www; done; '
+            . 'rm -rf "$W"';
+        $ctx->run(['bash', '-c', $script]);
+        @unlink($real);
+        $ctx->out('Restore complete — databases imported and site files extracted. Re-check site PHP pools if needed.');
+        return 0;
+    }
 
     /** Configure the rclone remote. stdin JSON: {type, host, user, pass, token, path, retention} */
     public static function config(Ctx $ctx, array $flags): int

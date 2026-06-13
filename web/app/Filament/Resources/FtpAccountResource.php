@@ -59,6 +59,24 @@ class FtpAccountResource extends Resource
                 Tables\Columns\TextColumn::make('created_at')->date()->label('Created'),
             ])
             ->actions([
+                Tables\Actions\Action::make('info')
+                    ->label('Connection info')
+                    ->icon('heroicon-o-information-circle')
+                    ->color('gray')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->infolist(fn (FtpAccount $record) => [
+                        \Filament\Infolists\Components\TextEntry::make('protocol')->state('SFTP (SSH File Transfer Protocol)'),
+                        \Filament\Infolists\Components\TextEntry::make('host')
+                            ->state(app(\App\Services\SystemStats::class)->addresses()['ipv4'] ?? $record->site->domain)
+                            ->helperText('You can also use the server hostname or your panel domain.'),
+                        \Filament\Infolists\Components\TextEntry::make('port')->state('22'),
+                        \Filament\Infolists\Components\TextEntry::make('username')->state($record->username)->copyable(),
+                        \Filament\Infolists\Components\TextEntry::make('folder')
+                            ->label('Accessible folder')
+                            ->state("/var/www/{$record->site->domain}  →  upload into htdocs/")
+                            ->helperText('The account is chrooted to its site and lands in htdocs/ (the web root).'),
+                    ]),
                 Tables\Actions\Action::make('password')
                     ->icon('heroicon-o-key')
                     ->form([

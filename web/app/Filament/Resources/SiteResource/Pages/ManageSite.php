@@ -297,6 +297,28 @@ class ManageSite extends Page implements HasForms
                     }
                 }),
 
+            Actions\Action::make('hotlink')
+                ->label($this->record->hotlink ? 'Hotlink protection: ON' : 'Hotlink protection: OFF')
+                ->icon('heroicon-o-photo')
+                ->color($this->record->hotlink ? 'success' : 'gray')
+                ->requiresConfirmation()
+                ->modalDescription('Blocks other websites from embedding this site\'s images and media (checks the Referer). Your own domain, its aliases, and major search engines are always allowed.')
+                ->action(function () {
+                    $enable = !$this->record->hotlink;
+                    $allowed = $this->record->aliases ?? [];
+                    $result = app(PanelCtl::class)->run('site:hotlink', [
+                        'domain' => $this->record->domain,
+                        'enable' => $enable ? '1' : '0',
+                    ], json_encode($allowed));
+                    if ($result->ok()) {
+                        $this->record->update(['hotlink' => $enable]);
+                        AuditLog::record('site.hotlink', $this->record->domain . ($enable ? ' on' : ' off'));
+                        Notification::make()->title($result->output())->success()->send();
+                    } else {
+                        Notification::make()->title('Failed')->body($result->output())->danger()->persistent()->send();
+                    }
+                }),
+
             Actions\Action::make('files')
                 ->label('File Manager')
                 ->icon('heroicon-o-folder')

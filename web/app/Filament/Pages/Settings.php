@@ -224,17 +224,60 @@ class Settings extends Page implements HasForms
             ->{$scheduleResult->ok() ? 'success' : 'danger'}()->send();
     }
 
+    public function testBackup(): void
+    {
+        $this->ctlNotify('backup:test');
+    }
+
+    public function runBackup(): void
+    {
+        $this->ctlNotify('backup:run', 'backup.run');
+    }
+
+    public function restoreAction(): Action
+    {
+        return Action::make('restore')
+            ->label('Restore from backup')
+            ->icon('heroicon-o-arrow-uturn-left')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalDescription('Imports all databases and overwrites site files from an uploaded full-backup .tar.gz. Existing data is replaced — this cannot be undone.')
+            ->form([
+                \Filament\Forms\Components\FileUpload::make('file')
+                    ->label('Full backup archive (.tar.gz)')
+                    ->disk('local')->directory('restore-uploads')->preserveFilenames()
+                    ->maxSize(262144)->required(),
+            ])
+            ->action(function (array $data) {
+                $full = storage_path('app/' . $data['file']);
+                $stage = config('hostingpanel.uploads');
+                if (!is_dir($stage)) {
+                    @mkdir($stage, 0750, true);
+                }
+                $tmp = rtrim($stage, '/') . '/' . bin2hex(random_bytes(8)) . '-restore.tar.gz';
+                if (!@copy($full, $tmp)) {
+                    Notification::make()->title('Could not stage the upload')->danger()->send();
+                    return;
+                }
+                @unlink($full);
+                $result = app(PanelCtl::class)->run('backup:restore', ['src' => $tmp]);
+                @unlink($tmp);
+                if ($result->ok()) {
+                    AuditLog::record('backup.restore', '');
+                }
+                Notification::make()->title($result->ok() ? 'Restore complete' : 'Restore failed')
+                    ->body($result->output())->{$result->ok() ? 'success' : 'danger'}()->persistent()->send();
+            });
+    }
+
+    public function getSitesProperty()
+    {
+        return \App\Models\Site::orderBy('domain')->pluck('domain', 'domain');
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('testBackup')
-                ->label('Test backup connection')
-                ->color('gray')
-                ->action(fn () => $this->ctlNotify('backup:test')),
-            Action::make('runBackup')
-                ->label('Run backup now')
-                ->color('success')
-                ->action(fn () => $this->ctlNotify('backup:run', 'backup.run')),
             Action::make('selfUpdate')
                 ->label('Update panel')
                 ->icon('heroicon-o-arrow-down-tray')
