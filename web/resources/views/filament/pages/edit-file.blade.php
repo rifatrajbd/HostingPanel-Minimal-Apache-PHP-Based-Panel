@@ -9,11 +9,11 @@
             {{ $this->currentSite()?->domain }}:{{ $path }}
         </div>
 
-        {{-- CodeMirror enhances the textarea; if it fails to load, the plain
-             textarea still works and saves. wire:ignore keeps Livewire from
-             clobbering CodeMirror's DOM. --}}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css">
+        {{-- CodeMirror is served locally (no CDN). If it somehow fails, the
+             plain textarea still works and saves. wire:ignore keeps Livewire
+             from clobbering CodeMirror's DOM. --}}
+        <link rel="stylesheet" href="/vendor/codemirror/lib/codemirror.min.css">
+        <link rel="stylesheet" href="/vendor/codemirror/theme/material-darker.min.css">
 
         <div wire:ignore
              x-data="{
@@ -36,18 +36,20 @@
                      };
                      if (window.CodeMirror) { start(); }
                      else {
+                         const base = '/vendor/codemirror';
                          const s = document.createElement('script');
-                         s.src = 'https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js';
+                         s.src = base + '/lib/codemirror.min.js';
                          s.onload = () => {
-                             // load common modes, then init
-                             const modes = ['xml','javascript','css','htmlmixed','php','clike','sql','yaml','markdown','shell'];
-                             let pending = modes.length;
-                             modes.forEach(m => {
+                             // Order matters: htmlmixed needs xml/js/css; php needs clike+htmlmixed.
+                             const modes = ['xml','javascript','css','htmlmixed','clike','php','sql','yaml','markdown','shell'];
+                             const loadNext = (i) => {
+                                 if (i >= modes.length) { start(); return; }
                                  const ms = document.createElement('script');
-                                 ms.src = `https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/${m}/${m}.min.js`;
-                                 ms.onload = ms.onerror = () => { if (--pending === 0) start(); };
+                                 ms.src = `${base}/mode/${modes[i]}/${modes[i]}.min.js`;
+                                 ms.onload = ms.onerror = () => loadNext(i + 1);
                                  document.head.appendChild(ms);
-                             });
+                             };
+                             loadNext(0);
                          };
                          s.onerror = () => this.fallback(ta);
                          document.head.appendChild(s);
