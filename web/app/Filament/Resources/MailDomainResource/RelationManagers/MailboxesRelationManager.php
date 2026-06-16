@@ -18,6 +18,11 @@ class MailboxesRelationManager extends RelationManager
     protected static string $relationship = 'mailboxes';
     protected static ?string $title = 'Mailboxes';
 
+    // Relation managers are read-only on a resource View page by default,
+    // which hides the Create/Delete actions. Mail domains have no Edit page,
+    // so opt in to interactivity here to allow managing mailboxes.
+    protected static bool $isReadOnly = false;
+
     public function form(Form $form): Form
     {
         return $form->schema([
