@@ -17,7 +17,7 @@ class MailDnsChecker extends Page implements HasForms
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
     protected static ?string $navigationGroup = 'Mail';
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
     protected static ?string $navigationLabel = 'DNS Checker';
     protected static ?string $title = 'Mail DNS Checker';
 

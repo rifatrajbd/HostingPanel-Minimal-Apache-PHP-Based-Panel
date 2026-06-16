@@ -12,7 +12,7 @@ class MailQueue extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-inbox-stack';
     protected static ?string $navigationGroup = 'Mail';
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
     protected static ?string $title = 'Mail Queue';
 
     protected static string $view = 'filament.pages.mail-queue';
