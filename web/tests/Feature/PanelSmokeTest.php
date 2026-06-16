@@ -64,6 +64,7 @@ class PanelSmokeTest extends TestCase
             '/ftp-accounts/create',
             '/mail-domains',
             '/mail-domains/create',
+            '/mail-dns-checker',
             '/mail-queue',
             '/ssl-manager',
             '/php-manager',

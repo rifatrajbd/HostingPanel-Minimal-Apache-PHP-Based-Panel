@@ -138,6 +138,80 @@ final class MailCommands
         return 0;
     }
 
+    /**
+     * Structured DNS check (one row per record) as JSON, for the panel's
+     * DNS Checker table. Each row: type, host, expected, found, status
+     * (ok | miss | warn). Mirrors dnsCheck() but machine-readable.
+     */
+    public static function dnsCheckJson(Ctx $ctx, array $flags): int
+    {
+        $domain = Validate::domain($flags['domain'] ?? '');
+        if ($ctx->dryRun) {
+            $ctx->out('[]');
+            return 0;
+        }
+        $ip4 = Net::ipv4();
+        $ip6 = Net::ipv6();
+        $dig = fn (string $type, string $host) => trim($ctx->run(['dig', '+short', $type, $host], null, true));
+        $rows = [];
+
+        $mx = $dig('MX', $domain);
+        $rows[] = [
+            'type' => 'MX', 'host' => $domain, 'expected' => "10 mail.{$domain}",
+            'found' => str_replace("\n", ', ', $mx) ?: 'none',
+            'status' => stripos($mx, "mail.{$domain}") !== false ? 'ok' : 'miss',
+        ];
+
+        $a = $dig('A', "mail.{$domain}");
+        $rows[] = [
+            'type' => 'A', 'host' => "mail.{$domain}", 'expected' => $ip4 ?? '(server IPv4)',
+            'found' => $a ?: 'none',
+            'status' => ($a !== '' && ($ip4 === null || str_contains($a, $ip4))) ? 'ok' : 'miss',
+        ];
+
+        if ($ip6 !== null) {
+            $aaaa = $dig('AAAA', "mail.{$domain}");
+            $rows[] = [
+                'type' => 'AAAA', 'host' => "mail.{$domain}", 'expected' => $ip6,
+                'found' => $aaaa ?: 'none',
+                'status' => ($aaaa !== '' && str_contains($aaaa, $ip6)) ? 'ok' : 'miss',
+            ];
+        }
+
+        $spf = $dig('TXT', $domain);
+        $rows[] = [
+            'type' => 'SPF', 'host' => $domain, 'expected' => 'v=spf1 mx -all',
+            'found' => $spf ?: 'none',
+            'status' => stripos($spf, 'v=spf1') !== false ? 'ok' : 'miss',
+        ];
+
+        $dkim = $dig('TXT', "mail._domainkey.{$domain}");
+        $rows[] = [
+            'type' => 'DKIM', 'host' => "mail._domainkey.{$domain}", 'expected' => 'v=DKIM1; k=rsa; p=…',
+            'found' => $dkim !== '' ? 'present' : 'none',
+            'status' => stripos($dkim, 'p=') !== false ? 'ok' : 'miss',
+        ];
+
+        $dmarc = $dig('TXT', "_dmarc.{$domain}");
+        $rows[] = [
+            'type' => 'DMARC', 'host' => "_dmarc.{$domain}", 'expected' => 'v=DMARC1; p=quarantine; …',
+            'found' => $dmarc ?: 'none',
+            'status' => stripos($dmarc, 'v=DMARC1') !== false ? 'ok' : 'miss',
+        ];
+
+        if ($ip4 !== null) {
+            $ptr = $dig('-x', $ip4);
+            $rows[] = [
+                'type' => 'PTR', 'host' => $ip4, 'expected' => "mail.{$domain}",
+                'found' => $ptr ?: 'unset',
+                'status' => stripos($ptr, "mail.{$domain}") !== false ? 'ok' : 'warn',
+            ];
+        }
+
+        $ctx->out((string) json_encode($rows));
+        return 0;
+    }
+
     /** @param array<string, string> $flags */
     public static function domainDelete(Ctx $ctx, array $flags): int
     {

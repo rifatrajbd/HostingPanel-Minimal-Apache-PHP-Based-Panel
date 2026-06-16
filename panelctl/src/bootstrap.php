@@ -54,6 +54,7 @@ final class Dispatcher
             'dns:acme' => [DnsCommands::class, 'acme'],
             'mail:dns' => [MailCommands::class, 'dns'],
             'mail:dnscheck' => [MailCommands::class, 'dnsCheck'],
+            'mail:dnscheck:json' => [MailCommands::class, 'dnsCheckJson'],
             'ftp:create' => [FtpCommands::class, 'create'],
             'ftp:password' => [FtpCommands::class, 'password'],
             'ftp:delete' => [FtpCommands::class, 'delete'],
