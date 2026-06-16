@@ -83,8 +83,12 @@ class MailDomainResource extends Resource
                 Tables\Columns\TextColumn::make('mailboxes_count')->counts('mailboxes')->label('Mailboxes'),
                 Tables\Columns\TextColumn::make('created_at')->date()->label('Created'),
             ])
+            ->recordUrl(fn (MailDomain $record): string => static::getUrl('view', ['record' => $record]))
             ->actions([
-                Tables\Actions\ViewAction::make()->label('DNS records'),
+                Tables\Actions\ViewAction::make()
+                    ->label('Mailboxes & DNS')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->url(fn (MailDomain $record): string => static::getUrl('view', ['record' => $record])),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->emptyStateHeading('No mail domains yet');

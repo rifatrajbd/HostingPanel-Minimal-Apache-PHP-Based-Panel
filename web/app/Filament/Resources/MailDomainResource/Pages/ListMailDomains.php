@@ -13,6 +13,11 @@ class ListMailDomains extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('webmail')
+                ->label('Open Webmail')
+                ->icon('heroicon-o-at-symbol')
+                ->color('gray')
+                ->url('/webmail/', shouldOpenInNewTab: true),
             Actions\CreateAction::make(),
         ];
     }

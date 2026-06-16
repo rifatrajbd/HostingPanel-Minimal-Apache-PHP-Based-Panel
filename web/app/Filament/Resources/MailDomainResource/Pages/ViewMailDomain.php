@@ -15,6 +15,11 @@ class ViewMailDomain extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('webmail')
+                ->label('Open Webmail')
+                ->icon('heroicon-o-at-symbol')
+                ->color('gray')
+                ->url('/webmail/', shouldOpenInNewTab: true),
             Action::make('checkDns')
                 ->label('Check DNS')
                 ->icon('heroicon-o-signal')
